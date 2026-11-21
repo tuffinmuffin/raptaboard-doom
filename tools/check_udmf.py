@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from wadlib import read_wad, Iwad
 
-wad, iwad = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "vendor/room4doom/data/doom1.wad"
+wad, iwad = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "downloads/freedoom/freedoom2.wad"
 _, lumps = read_wad(wad)
 text = next(l.data for l in lumps if l.name == "TEXTMAP").decode()
 blocks = collections.defaultdict(list)

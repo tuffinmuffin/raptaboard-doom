@@ -1,46 +1,65 @@
 # doomMod — FRC 2026 field as a Doom map
 
-Converts the FRC 2026 (REBUILT) field CAD into a playable Doom UDMF map, played
-in [room4doom](https://github.com/flukejones/room4doom), an MIT-licensed Doom engine
-written in Rust that builds its own BSP and understands UDMF.
+An easter-egg prototype for a raptaboard WASM widget: the FRC 2026 (REBUILT) field
+CAD converted into a playable Doom map, running on
+[room4doom](https://github.com/flukejones/room4doom) (MIT, Rust). We carry a small
+gameplay patch on room4doom, so the map targets **our room4doom build**, not other
+Doom ports (it uses UDMF with Doom-numbered specials and a custom monster).
 
 ## Quick start
 
 ```sh
-make setup assets   # python venv + AdvantageScope field/KitBot GLBs into downloads/
-make check          # build/frc2026.wad + structural validation + build/frc2026_preview.png
-make engine         # clone + cargo build room4doom into vendor/
-make play           # E1M1 replaced by the field, using room4doom's bundled doom1.wad
+make setup assets   # python venv; field/KitBot GLBs + Freedoom Phase 2 into downloads/
+make check          # build/frc2026.wad + validation + build/frc2026_preview.png
+make engine         # clone room4doom at the pinned rev, apply our patch, cargo build
+make play           # MAP01 with freedoom2.wad
 ```
+
+## What's in the map
+
+- **The field**: hubs, bumps, trench (drivable underneath), guardrails, driver stations.
+- **Towers + elevators**: each alliance tower is a platform at its upright height
+  (1.83 m), with a lift pad on the field side. Press *use* on the lift face to bring
+  it down; it rises after 3 s. Stepping from the tower top onto the pad sends it down.
+  BFG on the red tower top, megasphere on the blue one.
+- **Fuel → loot**: reachable Fuel balls become a weighted mix of ammo, health and armor,
+  and six spread-out ones become weapons (shotgun, super shotgun, chaingun, rocket
+  launcher, plasma, chainsaw).
+- **Endless waves**: Doom II's monster spawner (invisible shooter outside the far guardrail
+  + 10 spawn spots). It wakes when it sees or hears you and spits a monster roughly
+  every 5 s (none on the easiest skill). There is no boss brain, so it never stops.
+- **The hunter** (thing 30001, patch below): always knows where you are, 1200 HP,
+  faster than a Revenant, homing rockets, and it comes back 20 s after you kill it.
+  It uses Revenant art until the robot sprites exist.
+
+## Engine patch (`patches/room4doom.patch`, against `patches/room4doom.rev`)
+
+- `MT_HUNTER` added to `gameplay/src/info.rs` (Revenant states, own stats).
+- `hunter_acquire` in `thing/shooting.rs`, used by `a_chase`: target a live player
+  without a sight check.
+- `thing/mod.rs`: hunter corpses always respawn after 20 s, independent of `-respawn`.
+
+`tools/prep_room4doom.py` also drops upstream's GUI dev tools from the workspace (they
+need a local Zed checkout).
 
 ## How the conversion works (`tools/field2wad.py`)
 
 | Step | What |
 |---|---|
-| Load | All meshes from AdvantageScope's `Field3d_2026FRCFieldV2` GLB, converted to field coords (x length, y width, z up). Fuel balls are pulled out and become ammo pickups. |
-| Voxelize | 2in × 2in columns, 4-unit (3.1 cm) z bins. Steep faces are rasterized along their edges so thin panels/posts survive; flat faces are sampled at cell centers. |
-| Columns | Floor climbs from the carpet through anything within Doom's 24-unit step. A gap ≥ 56 units above that becomes a low ceiling (the trench); otherwise the column becomes a solid block topped at its highest geometry. |
-| Sectors | Equal (floor, ceiling, flat) cells are merged; regions < 3 cells are absorbed. Boundary edges become linedefs with collinear runs merged. |
-| Textures | CAD material colors → nearest from a curated list of doom1.wad flats/walls (red/blue alliance, aluminum, black, etc). |
-| Things | Player start on blue alliance; 396 reachable fuel → ammo clips; 8 zombiemen on red side as placeholders for robot monsters. |
+| Load | All meshes from AdvantageScope's `Field3d_2026FRCFieldV2` GLB in field coords. Fuel balls and tower parts are pulled out. |
+| Voxelize | 2in × 2in columns, 4-unit (3.1 cm) z bins. Steep faces are rasterized along their edges so thin panels/posts survive. |
+| Columns | Floor climbs from the carpet through anything within Doom's 24-unit step. A gap ≥ 56 units becomes a low ceiling (trench); otherwise a solid block. |
+| Towers | Footprint of the uprights/supports → platform; lift sector tagged 1 (red) / 2 (blue). |
+| Sectors | Equal (floor, ceiling, tag, flat) cells merged; tiny regions absorbed; boundary runs → linedefs. Lift faces get special 62 (SR), tower-top edges 88 (WR). |
+| Textures | CAD material colors → nearest from a curated list of IWAD flats/walls. |
 
-Scale is 128 map units per meter, so the Doom player (56 tall, 32 wide) is a
-~0.44 m robot that fits under the 22.25in trench. A flood fill from the start checks
-the field is sealed and the trench is drivable.
-
-## Layout
-
-- `tools/field2wad.py` — converter
-- `tools/check_udmf.py` — closed sector loops, valid refs, textures exist in the IWAD
-- `tools/wadlib.py` — WAD read/write + palette-averaged texture colors
-- `downloads/`, `vendor/`, `build/` — gitignored
+Scale is 128 map units per meter, so the player is a ~0.44 m robot that fits under
+the trench. A flood fill from the start checks the field is sealed.
 
 ## Next steps
 
-- KitBot monster sprites: render `downloads/kitbot2026/model.glb` from 8 angles
-  (Doom rotations 1–8) × walk/attack/pain/death frames, quantize to PLAYPAL, pack as
-  sprite lumps replacing a monster (e.g. POSS* zombieman) via a PWAD.
-- Real slopes for the bumps (UDMF `floorplane_*`, supported by room4doom's rbsp)
-  instead of 4-unit stairs.
-- Custom textures (carpet, polycarb, AprilTags) via TEXTURE1/PNAMES in the PWAD.
-- Consider Freedoom as the IWAD for fully redistributable builds.
+- KitBot sprites for the hunter and spawned monsters (8 rotations × frames from
+  `downloads/kitbot2026/model.glb`, quantized to the palette, packed in the PWAD).
+- WASM build of room4doom's core for the widget host once raptaboard's plugin API can
+  return a framebuffer and key up/down events.
+- Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).

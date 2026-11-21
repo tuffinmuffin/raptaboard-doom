@@ -45,7 +45,7 @@ FLATS = {
 WALLS = {
     "GRAY4": None, "GRAY5": None, "STARGR1": None, "SUPPORT2": None, "STONE": None,
     "STONE2": None, "METAL1": None, "COMPSPAN": None, "REDWALL1": None, "LITEBLU4": None,
-    "LITEBLU1": None, "DOORYEL": None, "LITE3": None, "COMPTILE": None, "DOORRED": None,
+    "LITEBLU1": None, "DOORYEL": None, "LITE3": None, "COMPTILE": None, "DOORRED": None, "REDWALL": None,
     "DOORBLU": None,
 }
 BORDER_WALL = "STARTAN3"
@@ -60,6 +60,7 @@ def log(*a):
 def load_field(glb: Path, skip=("Fuel",)):
     scene = trimesh.load(glb, force="scene")
     tris, cols, fuel = [], [], []
+    tower_parts = {}  # side (+1 blue/+x, -1 red/-x) -> list of vertex arrays
     # glTF is Y-up; AdvantageScope rotates +90deg about X: field = (x, -z, y)
     conv = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], dtype=np.float64)
     for node in scene.graph.nodes_geometry:
@@ -70,6 +71,8 @@ def load_field(glb: Path, skip=("Fuel",)):
             if "GE-26900" in node:
                 fuel.append(v.mean(axis=0))
             continue
+        if any(k in node for k in ("Tower Upright", "Tower Support Tube", "Tower Brace")):
+            tower_parts.setdefault(1 if v[:, 0].mean() > 0 else -1, []).append(v)
         col = np.array([0.5, 0.5, 0.5])
         mat = getattr(mesh.visual, "material", None)
         bcf = getattr(mat, "baseColorFactor", None)
@@ -78,7 +81,12 @@ def load_field(glb: Path, skip=("Fuel",)):
         f = v[mesh.faces]
         tris.append(f)
         cols.append(np.repeat(col[None], len(f), axis=0))
-    return np.concatenate(tris), np.concatenate(cols), np.array(fuel)
+    towers = {}
+    for side, vs in tower_parts.items():
+        v = np.concatenate(vs)
+        towers[side] = (*(float(a) for a in (v[:, 0].min(), v[:, 0].max(), v[:, 1].min(), v[:, 1].max())),
+                        float(v[:, 2].max()))
+    return np.concatenate(tris), np.concatenate(cols), np.array(fuel), towers
 
 
 # ---------------------------------------------------------------- voxelize
@@ -277,22 +285,67 @@ def build_lines(label, nx, ny):
 
 
 # ---------------------------------------------------------------- main
+# Doom thing types (Doom II / Freedoom Phase 2)
+T_PLAYER = [1, 2, 3, 4]
+T_SPAWN_SHOOTER, T_SPAWN_SPOT = 89, 87
+WEAPONS = [2001, 82, 2002, 2003, 2004, 2005]           # shotgun, SSG, chaingun, RL, plasma, chainsaw
+T_BFG, T_MEGASPHERE = 2006, 83
+T_HUNTER = 30001                                      # needs patches/room4doom.patch
+# fuel -> pickup mix (type, weight)
+PICKUPS = [
+    (2007, 22), (2048, 3),   # clip, ammo box
+    (2008, 20), (2049, 3),   # shells, shell box
+    (2010, 8), (2046, 1),    # rocket, rocket box
+    (2047, 8), (17, 1),      # cell, cell pack
+    (2014, 14), (2011, 4), (2012, 2),  # health bonus, stimpack, medikit
+    (2015, 12), (2018, 1),   # armor bonus, green armor
+]
+STARTING_MONSTERS = [3004, 9, 3001, 3002]  # zombieman, shotgunner, imp, demon
+
+# Doom line/sector specials
+SP_LIFT_SR = 62      # SR lower lift, wait, raise (press use on the lift face)
+SP_LIFT_WR = 88      # WR same, walk-over (top of the tower -> step onto the lift)
+LIFT_TEX = "PLAT1"
+LIFT_DEPTH_M = 0.75  # lift pad depth in front of the tower
+
+
+def farthest_points(pts, k, rng, seed_pt=None):
+    """Greedy farthest-point sampling: k well-spread indices into pts."""
+    if len(pts) == 0:
+        return []
+    chosen = [int(rng.integers(len(pts)))] if seed_pt is None else []
+    d = np.full(len(pts), np.inf)
+    if seed_pt is not None:
+        d = np.linalg.norm(pts - np.asarray(seed_pt), axis=1)
+    for c in chosen:
+        d = np.minimum(d, np.linalg.norm(pts - pts[c], axis=1))
+    while len(chosen) < min(k, len(pts)):
+        c = int(np.argmax(d))
+        chosen.append(c)
+        d = np.minimum(d, np.linalg.norm(pts - pts[c], axis=1))
+    return chosen
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--glb", default="downloads/field2026/model.glb")
-    ap.add_argument("--iwad", default="vendor/room4doom/data/doom1.wad")
+    ap.add_argument("--iwad", default="downloads/freedoom/freedoom2.wad")
     ap.add_argument("--out", default="build/frc2026.wad")
-    ap.add_argument("--map", default="E1M1")
+    ap.add_argument("--map", default="MAP01")
     ap.add_argument("--cell-in", type=float, default=2.0, help="grid cell size in inches")
     ap.add_argument("--min-region", type=int, default=3, help="merge regions smaller than N cells")
     ap.add_argument("--preview", default="build/frc2026_preview.png")
-    ap.add_argument("--monsters", type=int, default=8, help="placeholder monsters on red side")
+    ap.add_argument("--monsters", type=int, default=8, help="starting monsters on the red side")
+    ap.add_argument("--spawn-spots", type=int, default=10, help="boss-spawner targets (0 = no spawner)")
+    ap.add_argument("--seed", type=int, default=2026)
+    ap.add_argument("--no-hunter", dest="hunter", action="store_false", help="omit the doomMod hunter")
     args = ap.parse_args()
+    rng = np.random.default_rng(args.seed)
 
     cell = args.cell_in * 0.0254
     zbin_m = Z_BIN / UNITS_PER_M
-    tris, cols, fuel = load_field(Path(args.glb))
-    log(f"{len(tris):,} triangles, {len(fuel)} fuel")
+    tris, cols, fuel, towers = load_field(Path(args.glb))
+    log(f"{len(tris):,} triangles, {len(fuel)} fuel, towers: {towers}")
     lo = tris.reshape(-1, 3).min(0)
     hi = tris.reshape(-1, 3).max(0)
     origin = lo[:2]
@@ -307,6 +360,25 @@ def main():
     ceil_u = np.where(ceil_b < 0, SKY_H, ceil_b * Z_BIN)
     colors = top_colors(hits, floor_u / UNITS_PER_M, ny, cols)
 
+    def box(x0, x1, y0, y1):
+        i0, i1 = int(np.floor((x0 - origin[0]) / cell)), int(np.ceil((x1 - origin[0]) / cell))
+        j0, j1 = int(np.floor((y0 - origin[1]) / cell)), int(np.ceil((y1 - origin[1]) / cell))
+        return slice(max(i0, 0), min(i1, nx)), slice(max(j0, 0), min(j1, ny))
+
+    # -------- towers: solid platform at the uprights' height, lift pad on the field side
+    tag = np.zeros((nx, ny), dtype=np.int64)
+    tower_tops = {}  # side -> (x, y) center of the platform
+    for t, side in enumerate(sorted(towers), start=1):
+        x0, x1, y0, y1, ztop = towers[side]
+        top = int(round(ztop * UNITS_PER_M / Z_BIN)) * Z_BIN
+        plat = box(x0, x1, y0, y1)
+        floor_u[plat], ceil_u[plat], colors[plat] = top, SKY_H, (0.79, 0.79, 0.79)
+        lx0, lx1 = (x0 - LIFT_DEPTH_M, x0) if side > 0 else (x1, x1 + LIFT_DEPTH_M)
+        lift = box(lx0, lx1, y0, y1)
+        floor_u[lift], ceil_u[lift], colors[lift], tag[lift] = top, SKY_H, (0.96, 0.6, 0.05), t
+        tower_tops[side] = ((x0 + x1) / 2, (y0 + y1) / 2)
+        log(f"tower {'blue' if side > 0 else 'red'}: top {top}u, lift tag {t}")
+
     flats, walls = load_texture_colors(args.iwad)
     # color -> flat id
     qcol = np.round(colors * 20) / 20
@@ -315,26 +387,26 @@ def main():
     flat_names = sorted(set(flat_for))
     flat_idx = np.array([flat_names.index(f) for f in flat_for])[inv.ravel()].reshape(nx, ny)
 
-    # sector key and cleanup of tiny regions
-    key = (floor_u.astype(np.int64) << 20) | (ceil_u.astype(np.int64) << 8) | flat_idx
+    # sector key: floor | ceiling | tag | flat ; then absorb tiny regions
+    key = (floor_u.astype(np.int64) << 32) | (ceil_u.astype(np.int64) << 16) | (tag << 8) | flat_idx
     for _ in range(4):
         lab, keys = label_regions(key)
         sizes = np.bincount(lab.ravel())
-        small = sizes[lab] < args.min_region
+        small = (sizes[lab] < args.min_region) & (tag == 0)
         if not small.any():
             break
-        # replace small cells with the most frequent neighbouring key (prefer higher floor)
         key = np.where(small, neighbour_mode(key, ~small), key)
     lab, keys = label_regions(key)
     log(f"{len(keys)} sectors")
 
-    sec_floor = (keys >> 20).astype(int)
-    sec_ceil = ((keys >> 8) & 0xFFF).astype(int)
+    sec_floor = (keys >> 32).astype(int)
+    sec_ceil = ((keys >> 16) & 0xFFFF).astype(int)
+    sec_tag = ((keys >> 8) & 0xFF).astype(int)
     sec_flat = [flat_names[int(k & 0xFF)] for k in keys]
     sec_rgb = np.zeros((len(keys), 3))
     np.add.at(sec_rgb, lab.ravel(), colors.reshape(-1, 3))
     sec_rgb /= np.bincount(lab.ravel(), minlength=len(keys))[:, None]
-    sec_wall = [nearest(walls, c) for c in sec_rgb]
+    sec_wall = [LIFT_TEX if sec_tag[s] else nearest(walls, c) for s, c in enumerate(sec_rgb)]
 
     lines = build_lines(lab, nx, ny)
     log(f"{len(lines)} linedefs")
@@ -353,39 +425,54 @@ def main():
             verts.append(to_map(gx, gy))
         return vid[k]
 
+    def side(sec, other):
+        parts = [f"sector = {sec}"]
+        if sec_floor[other] > sec_floor[sec]:
+            parts.append(f'texturebottom = "{sec_wall[other]}"')
+        if sec_ceil[other] < sec_ceil[sec]:
+            parts.append(f'texturetop = "{sec_wall[other]}"')
+        return "sidedef { " + "; ".join(parts) + "; }"
+
     out = ['namespace = "zdoom";', ""]
     sides = []
     linedefs = []
+    nlift = 0
     for x0, y0, x1, y1, right, left in lines:
         if right < 0:  # flip so the front faces a real sector
             x0, y0, x1, y1, right, left = x1, y1, x0, y0, left, right
-        v1, v2 = vertex(x0, y0), vertex(x1, y1)
         if left < 0:
+            v1, v2 = vertex(x0, y0), vertex(x1, y1)
             sides.append(f'sidedef {{ sector = {right}; texturemiddle = "{BORDER_WALL}"; }}')
             linedefs.append(f"linedef {{ v1 = {v1}; v2 = {v2}; sidefront = {len(sides) - 1}; blocking = true; }}")
             continue
-        # texture each side by the higher neighbour's material
-        def side(sec, other):
-            parts = [f"sector = {sec}"]
-            if sec_floor[other] > sec_floor[sec]:
-                parts.append(f'texturebottom = "{sec_wall[other]}"')
-            if sec_ceil[other] < sec_ceil[sec]:
-                parts.append(f'texturetop = "{sec_wall[other]}"')
-            return "sidedef { " + "; ".join(parts) + "; }"
+        extra = ""
+        t = sec_tag[right] or sec_tag[left]
+        if t and not (sec_tag[right] and sec_tag[left]):
+            lift, other = (right, left) if sec_tag[right] else (left, right)
+            if sec_floor[other] >= sec_floor[lift]:
+                extra = f" special = {SP_LIFT_WR}; id = {t};"          # tower top -> lift
+            else:
+                extra = f" special = {SP_LIFT_SR}; id = {t};"          # use the lift face
+                if right == lift:  # switches only work from the front side
+                    x0, y0, x1, y1, right, left = x1, y1, x0, y0, left, right
+            nlift += 1
+        v1, v2 = vertex(x0, y0), vertex(x1, y1)
         sides.append(side(right, left))
         front = len(sides) - 1
         sides.append(side(left, right))
         linedefs.append(
-            f"linedef {{ v1 = {v1}; v2 = {v2}; sidefront = {front}; sideback = {front + 1}; twosided = true; }}"
+            f"linedef {{ v1 = {v1}; v2 = {v2}; sidefront = {front}; sideback = {front + 1}; twosided = true;{extra} }}"
         )
+    log(f"{nlift} lift trigger lines")
 
     # -------- things
     things = []
 
-    def thing(x_m, y_m, ttype, angle=0):
+    def thing(x_m, y_m, ttype, angle=0, skills=(1, 2, 3, 4, 5)):
+        sk = " ".join(f"skill{s} = true;" for s in skills)
         things.append(
             f"thing {{ x = {x_m * UNITS_PER_M:.1f}; y = {y_m * UNITS_PER_M:.1f}; angle = {angle}; type = {ttype}; "
-            "single = true; coop = true; dm = true; skill1 = true; skill2 = true; skill3 = true; skill4 = true; skill5 = true; }"
+            f"single = true; coop = true; dm = true; {sk} }}"
         )
 
     def cell_of(x_m, y_m):
@@ -401,31 +488,62 @@ def main():
         start = find_open(open_floor, start)
     thing(*start, 1, 180)
     for k, (x, y) in enumerate([(6.0, -1.5), (6.0, 1.5), (5.0, 3.0)]):
-        thing(x, y, [2, 3, 4][k], 180) if open_floor(x, y) else None
+        thing(x, y, T_PLAYER[k + 1], 180) if open_floor(x, y) else None
 
     reach = reachable(floor_u, ceil_u, cell_of(*start))
     xs = origin[0] + (np.nonzero(reach)[0] + 0.5) * cell
     ys = origin[1] + (np.nonzero(reach)[1] + 0.5) * cell
     log(f"reachable under overhangs (trench): {(reach & (ceil_u < SKY_H)).sum()} cells")
-    log(f"reachable from start: {reach.sum()} cells,x [{xs.min():.2f}, {xs.max():.2f}] y [{ys.min():.2f}, {ys.max():.2f}]")
+    log(f"reachable from start: {reach.sum()} cells, x [{xs.min():.2f}, {xs.max():.2f}] y [{ys.min():.2f}, {ys.max():.2f}]")
     np.save(Path(args.out).with_suffix(".reach.npy"), reach)
-    # fuel -> ammo clips (only where reachable floor)
-    nfuel = 0
-    for fx, fy, _fz in fuel:
-        i, j = cell_of(fx, fy)
-        if open_floor(fx, fy) and reach[i, j]:
-            thing(fx, fy, 2007)
-            nfuel += 1
-    # placeholder monsters (zombiemen) on red side; future: FRC robot sprites
-    rng = np.random.default_rng(2026)
+
+    def walkable(x, y):
+        i, j = cell_of(x, y)
+        return open_floor(x, y) and reach[i, j]
+
+    # tower-top rewards: BFG on the enemy (red) tower, megasphere on ours
+    for side_, (tx, ty) in tower_tops.items():
+        thing(tx, ty, T_BFG if side_ < 0 else T_MEGASPHERE)
+
+    # fuel -> weapons (spread out) + weighted ammo/health/armor mix
+    fpos = np.array([(fx, fy) for fx, fy, _ in fuel if walkable(fx, fy)])
+    weapon_at = {i: WEAPONS[n] for n, i in enumerate(farthest_points(fpos, len(WEAPONS), rng, seed_pt=start))}
+    types, weights = zip(*PICKUPS)
+    p = np.array(weights, dtype=float) / sum(weights)
+    counts = {}
+    for i, (fx, fy) in enumerate(fpos):
+        tt = weapon_at.get(i) or int(rng.choice(types, p=p))
+        counts[tt] = counts.get(tt, 0) + 1
+        thing(fx, fy, tt)
+    log(f"fuel -> {dict(sorted(counts.items()))}")
+
+    # starting monsters on the red side
     placed = 0
     while placed < args.monsters:
         x, y = rng.uniform(-7.5, -2.0), rng.uniform(-3.6, 3.6)
-        i, j = cell_of(x, y)
-        if open_floor(x, y) and reach[i, j]:
-            thing(x, y, 3004, 180)
+        if walkable(x, y):
+            thing(x, y, int(rng.choice(STARTING_MONSTERS)), 0)
             placed += 1
-    log(f"things: {len(things)} ({nfuel} fuel clips, {placed} monsters)")
+
+    # the hunter (doomMod engine thing 30001): starts on the red side and never stops
+    if args.hunter:
+        hx, hy = find_open(walkable, (-6.5, -2.0)) if not walkable(-6.5, -2.0) else (-6.5, -2.0)
+        thing(hx, hy, T_HUNTER, 0, skills=(2, 3, 4, 5))
+        log(f"hunter at ({hx:.2f}, {hy:.2f})")
+
+    # endless waves: Doom II boss spawner. The shooter is invisible and wakes on sight or
+    # gunfire; it spits a cube at the next spawn spot every ~5 s (none on skill 1).
+    if args.spawn_spots:
+        shooter = (0.0, 4.35)  # outside the guardrail on the far side, centered
+        cand = np.array([(x, y) for x in np.arange(-7.8, 7.81, 0.4) for y in np.arange(-3.6, 3.61, 0.4)
+                         if walkable(x, y) and abs(y - shooter[1]) > 1.0
+                         and math.dist((x, y), start) > 3.5])
+        spots = cand[farthest_points(cand, args.spawn_spots, rng)]
+        thing(*shooter, T_SPAWN_SHOOTER, 270)
+        for x, y in spots:
+            thing(x, y, T_SPAWN_SPOT)
+        log(f"spawner at {shooter} with {len(spots)} spots")
+    log(f"things: {len(things)}")
 
     out += things
     out += [f"vertex {{ x = {x:.3f}; y = {y:.3f}; }}" for x, y in verts]
@@ -433,11 +551,12 @@ def main():
     out += sides
     for s in range(len(keys)):
         sky = sec_ceil[s] >= SKY_H
+        tid = f" id = {sec_tag[s]};" if sec_tag[s] else ""
         out.append(
             "sector { "
             f"heightfloor = {sec_floor[s]}; heightceiling = {sec_ceil[s]}; "
             f'texturefloor = "{sec_flat[s]}"; textureceiling = "{"F_SKY1" if sky else OVERHANG_CEIL}"; '
-            f"lightlevel = {200 if sky else 150}; }}"
+            f"lightlevel = {200 if sky else 150};{tid} }}"
         )
     textmap = ("\n".join(out) + "\n").encode()
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -445,7 +564,7 @@ def main():
     log(f"wrote {args.out} ({len(textmap) / 1e6:.1f} MB TEXTMAP, {len(verts)} vertices)")
 
     meta = {"sectors": len(keys), "linedefs": len(linedefs), "vertices": len(verts), "things": len(things),
-            "grid": [nx, ny, nz], "units_per_m": UNITS_PER_M}
+            "grid": [nx, ny, nz], "units_per_m": UNITS_PER_M, "map": args.map}
     Path(args.out).with_suffix(".json").write_text(json.dumps(meta, indent=2))
     if args.preview:
         write_preview(args.preview, floor_u, ceil_u, colors)

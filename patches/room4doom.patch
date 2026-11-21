@@ -1,0 +1,122 @@
+diff --git a/gameplay/src/info.rs b/gameplay/src/info.rs
+index 49e85fc..45a36a5 100644
+--- a/gameplay/src/info.rs
++++ b/gameplay/src/info.rs
+@@ -228,6 +228,8 @@ MT_MISC62, MT_MISC63, MT_MISC64, MT_MISC65, MT_MISC66, MT_MISC67, MT_MISC68, MT_
+ MT_MISC70, MT_MISC71, MT_MISC72, MT_MISC73, MT_MISC74, MT_MISC75, MT_MISC76, MT_MISC77, 
+ MT_MISC78, MT_MISC79, MT_MISC80, MT_MISC81, MT_MISC82, MT_MISC83, MT_MISC84, MT_MISC85, 
+ MT_MISC86, 
++// doomMod: FRC hunter (map thing 30001)
++MT_HUNTER,
+ Count,
+ }
+ impl MapObjKind {
+@@ -12680,4 +12682,31 @@ pub const MOBJINFO: [MapObjInfo; NUM_CATEGORIES] = [
+         flags: MapObjFlag::from_bits_truncate(MapObjFlag::Noblockmap.bits()),
+         raisestate: StateNum::None,
+     },
++    // MT_HUNTER (doomMod): a tougher, faster Revenant-based stalker that always
++    // knows where the player is and respawns 20 s after it dies.
++    MapObjInfo {
++        doomednum: 30001,
++        spawnstate: StateNum::SKEL_RUN1,
++        spawnhealth: 1200,
++        seestate: StateNum::SKEL_RUN1,
++        seesound: SfxName::Skesit,
++        reactiontime: 8,
++        attacksound: SfxName::None,
++        painstate: StateNum::SKEL_PAIN,
++        painchance: 30,
++        painsound: SfxName::Popain,
++        meleestate: StateNum::SKEL_FIST1,
++        missilestate: StateNum::SKEL_MISS1,
++        deathstate: StateNum::SKEL_DIE1,
++        xdeathstate: StateNum::None,
++        deathsound: SfxName::Skedth,
++        speed: 14,
++        radius: 20.0,
++        height: 56.0,
++        mass: 800,
++        damage: 0,
++        activesound: SfxName::Skeact,
++        flags: MapObjFlag::from_bits_truncate(MapObjFlag::Solid.bits() | MapObjFlag::Shootable.bits() | MapObjFlag::Countkill.bits()),
++        raisestate: StateNum::None,
++    },
+ ];
+diff --git a/gameplay/src/thing/enemy.rs b/gameplay/src/thing/enemy.rs
+index a18fe2f..1842637 100644
+--- a/gameplay/src/thing/enemy.rs
++++ b/gameplay/src/thing/enemy.rs
+@@ -162,14 +162,14 @@ pub(crate) fn a_chase(actor: &mut MapObject) {
+         let target = unsafe { (*target).mobj() };
+         // Inanimate object, try to find new target
+         if !target.flags.contains(MapObjFlag::Shootable) {
+-            if actor.look_for_players(true) {
++            if actor.hunter_acquire() || actor.look_for_players(true) {
+                 return; // Found a new target
+             }
+             actor.set_state(actor.info.spawnstate);
+             return;
+         }
+     } else {
+-        if actor.look_for_players(true) {
++        if actor.hunter_acquire() || actor.look_for_players(true) {
+             return; // Found a new target
+         }
+         actor.set_state(actor.info.spawnstate);
+diff --git a/gameplay/src/thing/mod.rs b/gameplay/src/thing/mod.rs
+index 6c10cb0..7496018 100644
+--- a/gameplay/src/thing/mod.rs
++++ b/gameplay/src/thing/mod.rs
+@@ -1277,18 +1277,21 @@ impl Think for MapObject {
+             if !this.flags.contains(MapObjFlag::Countkill) {
+                 return false;
+             }
+-            if !level.options.respawn_monsters {
++            // doomMod: the hunter always comes back, regardless of skill/-respawn
++            let hunter = this.kind == MapObjKind::MT_HUNTER;
++            if !level.options.respawn_monsters && !hunter {
+                 return false;
+             }
+             this.movecount += 1;
+ 
+-            if this.movecount < 12 * TICRATE {
++            let delay = if hunter { 20 * TICRATE } else { 12 * TICRATE };
++            if this.movecount < delay {
+                 return false;
+             }
+             if (level.level_time & 31) != 0 {
+                 return false;
+             }
+-            if p_random() > 4 {
++            if !hunter && p_random() > 4 {
+                 return false;
+             }
+             this.nightmare_respawn();
+diff --git a/gameplay/src/thing/shooting.rs b/gameplay/src/thing/shooting.rs
+index 6b1ca76..3996b05 100644
+--- a/gameplay/src/thing/shooting.rs
++++ b/gameplay/src/thing/shooting.rs
+@@ -378,6 +378,22 @@ impl MapObject {
+     /// wrong drifts `lastlook` so the `lastlook == stop` guard
+     /// short-circuits before the sight check, and monsters that should wake
+     /// never do — a demo-desync source.
++    /// doomMod hunter: always knows where a live player is (no sight check).
++    pub(crate) fn hunter_acquire(&mut self) -> bool {
++        if self.kind != MapObjKind::MT_HUNTER {
++            return false;
++        }
++        for i in 0..MAXPLAYERS {
++            if self.level().players_in_game()[i] && self.level().players()[i].status.health > 0 {
++                self.target = self.level_mut().players_mut()[i].mobj_mut().map(|m| m.thinker);
++                if self.target.is_some() {
++                    return true;
++                }
++            }
++        }
++        false
++    }
++
+     pub(crate) fn look_for_players(&mut self, all_around: bool) -> bool {
+         let stop = (self.lastlook + MAXPLAYERS - 1) & 3;
+         let mut count = 0;
