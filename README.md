@@ -63,3 +63,8 @@ the trench. A flood fill from the start checks the field is sealed.
 - WASM build of room4doom's core for the widget host once raptaboard's plugin API can
   return a framebuffer and key up/down events.
 - Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).
+
+## License
+
+Our code is MIT ([LICENSE](LICENSE)). Game data (field model, Freedoom, the built WAD)
+is not in this repo; see [NOTICE.md](NOTICE.md) for its sources and terms.
