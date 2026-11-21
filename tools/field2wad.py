@@ -300,7 +300,7 @@ PICKUPS = [
     (2014, 14), (2011, 4), (2012, 2),  # health bonus, stimpack, medikit
     (2015, 12), (2018, 1),   # armor bonus, green armor
 ]
-STARTING_MONSTERS = [3004, 9, 3001, 3002]  # zombieman, shotgunner, imp, demon
+STARTING_MONSTERS = [3004, 9, 65]  # KitBot 2026 / 2025 / 2024 (zombieman, shotgunner, chaingunner sprites)
 
 # Doom line/sector specials
 SP_LIFT_PERPETUAL = 87  # WR perpetual lift: cycles lowest <-> highest neighbour floor, 3 s waits
@@ -334,7 +334,7 @@ def main():
     ap.add_argument("--cell-in", type=float, default=2.0, help="grid cell size in inches")
     ap.add_argument("--min-region", type=int, default=3, help="merge regions smaller than N cells")
     ap.add_argument("--preview", default="build/frc2026_preview.png")
-    ap.add_argument("--monsters", type=int, default=8, help="starting monsters on the red side")
+    ap.add_argument("--monsters", type=int, default=12, help="starting robot monsters on the red side")
     ap.add_argument("--spawn-spots", type=int, default=10, help="boss-spawner targets (0 = no spawner)")
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--no-hunter", dest="hunter", action="store_false", help="omit the doomMod hunter")

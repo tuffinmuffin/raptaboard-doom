@@ -12,7 +12,7 @@ notices below.
 
 | What | Source | License |
 |---|---|---|
-| 2026 FRC field and 2026 KitBot 3D models | [AdvantageScopeAssets](https://github.com/Mechanical-Advantage/AdvantageScopeAssets) by Littleton Robotics (FRC 6328) | BSD-3-Clause-style: keep the copyright notice and disclaimer; don't use their names to endorse derived products |
+| 2026 FRC field and 2024/2025/2026 KitBot 3D models (the KitBot sprites are renders of these) | [AdvantageScopeAssets](https://github.com/Mechanical-Advantage/AdvantageScopeAssets) by Littleton Robotics (FRC 6328) | BSD-3-Clause-style: keep the copyright notice and disclaimer; don't use their names to endorse derived products |
 | Underlying field design and CAD | *FIRST*® ([playing field resources](https://www.firstinspires.org/robotics/frc/playing-field)) | No specific license published for the field CAD; *FIRST*® and *FIRST*® Robotics Competition are trademarks of *FIRST* |
 | Freedoom Phase 2 IWAD (`freedoom2.wad`) | [Freedoom](https://freedoom.github.io/) | BSD-3-Clause; see `COPYING.txt` in the release |
 | room4doom engine | [flukejones/room4doom](https://github.com/flukejones/room4doom) | MIT, Copyright (c) 2020 Luke Jones. `patches/room4doom.patch` is a modification of it under the same license |

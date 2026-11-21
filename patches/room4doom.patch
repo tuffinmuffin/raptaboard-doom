@@ -131,3 +131,31 @@ index 6b1ca76..3996b05 100644
      pub(crate) fn look_for_players(&mut self, all_around: bool) -> bool {
          let stop = (self.lastlook + MAXPLAYERS - 1) & 3;
          let mut count = 0;
+diff --git a/wad/src/wad.rs b/wad/src/wad.rs
+index ef9747e..41e7a45 100755
+--- a/wad/src/wad.rs
++++ b/wad/src/wad.rs
+@@ -331,7 +331,11 @@ impl WadData {
+         let name = map_name.to_ascii_uppercase();
+         for (idx, info) in self.lumps.iter().enumerate().rev() {
+             if info.name == name {
+-                return self.lumps.get(idx + lump as usize);
++                // Map lumps are positional, but a UDMF map (marker, TEXTMAP, ENDMAP) has no
++                // REJECT/BLOCKMAP: the slot then holds whatever lump follows (e.g. sprites
++                // from the next PWAD). Only accept the lump if its name is what we expect.
++                let expected = lump.to_string();
++                return self.lumps.get(idx + lump as usize).filter(|l| l.name == expected);
+             }
+         }
+         None
+@@ -370,7 +374,9 @@ impl WadData {
+     /// The `TEXTMAP` lump bytes for a UDMF map, or `None` for a classic map.
+     /// UDMF maps store `TEXTMAP` immediately after the map marker.
+     pub fn read_textmap(&self, map_name: &str) -> Option<&[u8]> {
+-        let lump = self.find_lump_for_map(map_name, MapLump::Things)?;
++        let name = map_name.to_ascii_uppercase();
++        let idx = self.lumps.iter().rposition(|l| l.name == name)?;
++        let lump = self.lumps.get(idx + 1)?;
+         (lump.name == "TEXTMAP").then_some(lump.data.as_slice())
+     }
+ 

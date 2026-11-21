@@ -12,7 +12,7 @@ Doom ports (it uses UDMF with Doom-numbered specials and a custom monster).
 make setup assets   # python venv; field/KitBot GLBs + Freedoom Phase 2 into downloads/
 make check          # build/frc2026.wad + validation + build/frc2026_preview.png
 make engine         # clone room4doom at the pinned rev, apply our patch, cargo build
-make play           # MAP01 with freedoom2.wad
+make play           # MAP01 with freedoom2.wad + build/robots.wad (renders sprites on first run)
 ```
 
 ## What's in the map
@@ -29,6 +29,10 @@ make play           # MAP01 with freedoom2.wad
 - **Endless waves**: Doom II's monster spawner (invisible shooter outside the far guardrail
   + 10 spawn spots). It wakes when it sees or hears you and spits a monster roughly
   every 5 s (none on the easiest skill). There is no boss brain, so it never stops.
+- **Robot enemies**: the zombieman, shotgunner and chaingunner are FIRST KitBots
+  (2026, 2025, 2024), rendered from AdvantageScope's CAD by `tools/robot_sprites.py`
+  into `build/robots.wad`. 12 of them start on the red side. Spawned waves are still
+  stock Doom II monsters.
 - **The hunter** (thing 30001, patch below): always knows where you are, 1200 HP,
   faster than a Revenant, homing rockets, and it comes back 20 s after you kill it.
   It uses Revenant art until the robot sprites exist.
@@ -39,6 +43,20 @@ make play           # MAP01 with freedoom2.wad
 - `hunter_acquire` in `thing/shooting.rs`, used by `a_chase`: target a live player
   without a sight check.
 - `thing/mod.rs`: hunter corpses always respawn after 20 s, independent of `-respawn`.
+- `wad/src/wad.rs`: map lumps are found by position after the marker; a UDMF map has no
+  REJECT/BLOCKMAP, so the lookup now checks the lump name. Without this, a second PWAD
+  (the robot sprites) made the engine read a sprite as REJECT and panic.
+
+## Robot sprites (`tools/robot_sprites.py`)
+
+Point-splat renderer: ~1.5M colored points sampled from the CAD surfaces, projected
+orthographically with a z-buffer at 3× supersampling from each of Doom's 8 rotations
+(14° downward pitch), then quantized to the IWAD palette. Walk frames bob, attack
+frames add a muzzle flash, pain is tinted red, death tips the robot over and burns out,
+and the gib death blows it into ~12 cm chunks that settle as debris. Lump names match
+the IWAD's exactly (including mirrored pairs like `SPOSA2A8`) so they override
+one-for-one. `build/robots_preview.png` is a contact sheet. Sprite scale is
+`--ppm` (60 px per meter).
 
 `tools/prep_room4doom.py` also drops upstream's GUI dev tools from the workspace (they
 need a local Zed checkout).
@@ -59,8 +77,8 @@ the trench. A flood fill from the start checks the field is sealed.
 
 ## Next steps
 
-- KitBot sprites for the hunter and spawned monsters (8 rotations × frames from
-  `downloads/kitbot2026/model.glb`, quantized to the palette, packed in the PWAD).
+- Robot sprites for the hunter (its own sprite prefix in the engine) and for the
+  spawner's monsters (or an engine patch so the spawner picks robot types).
 - WASM build of room4doom's core for the widget host once raptaboard's plugin API can
   return a framebuffer and key up/down events.
 - Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).
