@@ -24,6 +24,7 @@ $(R4D):
 	git clone --depth 1 https://github.com/flukejones/room4doom $(R4D)
 
 engine: $(R4D)
+	$(PY) tools/prep_room4doom.py $(R4D)
 	cd $(R4D) && cargo build --release -p room4doom
 
 play: wad
