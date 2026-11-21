@@ -334,8 +334,8 @@ def main():
     ap.add_argument("--cell-in", type=float, default=2.0, help="grid cell size in inches")
     ap.add_argument("--min-region", type=int, default=3, help="merge regions smaller than N cells")
     ap.add_argument("--preview", default="build/frc2026_preview.png")
-    ap.add_argument("--monsters", type=int, default=12, help="starting robot monsters on the red side")
-    ap.add_argument("--spawn-spots", type=int, default=10, help="boss-spawner targets (0 = no spawner)")
+    ap.add_argument("--monsters", type=int, default=3, help="robot enemies on the red side (cycles 2026/2025/2024 KitBots); they respawn 10-30 s after dying")
+    ap.add_argument("--spawn-spots", type=int, default=0, help="Doom II boss-spawner targets for endless stock-monster waves (0 = off)")
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--no-hunter", dest="hunter", action="store_false", help="omit the doomMod hunter")
     args = ap.parse_args()
@@ -523,7 +523,7 @@ def main():
     while placed < args.monsters:
         x, y = rng.uniform(-7.5, -2.0), rng.uniform(-3.6, 3.6)
         if walkable(x, y):
-            thing(x, y, int(rng.choice(STARTING_MONSTERS)), 0)
+            thing(x, y, STARTING_MONSTERS[placed % len(STARTING_MONSTERS)], 0)
             placed += 1
 
     # the hunter (doomMod engine thing 30001): starts on the red side and never stops

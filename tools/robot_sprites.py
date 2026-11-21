@@ -17,6 +17,7 @@ import json
 import math
 import struct
 import sys
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,13 +39,19 @@ class Monster:
     robot: str
     flash: str
     death: str
+    hunter: bool = False   # red eyes + oil damage; lump names are generated (not in the IWAD)
 
 
 MONSTERS = [
     Monster("POSS", "downloads/kitbot2026", flash="F", death="HIJKL"),     # zombieman
     Monster("SPOS", "downloads/kitbot2025", flash="F", death="HIJKL"),     # shotgunner
     Monster("CPOS", "downloads/kitbot2024", flash="EF", death="HIJKLMN"),  # chaingunner
+    # the hunter (engine sprite HUNT, POSS-style frames A-G x8 rotations, H-L death, M-U gib)
+    Monster("HUNT", "downloads/kitbot2026", flash="F", death="HIJKL", hunter=True),
 ]
+HUNT_NAMES = [f"HUNT{f}{r}" for f in "ABCDEFG" for r in range(1, 9)] + [f"HUNT{f}0" for f in "HIJKLMNOPQRSTU"]
+
+OIL = np.array([0.06, 0.055, 0.075])   # near-black with a cool sheen
 
 
 def log(*a):
@@ -207,6 +214,46 @@ def fire_particles(rng, center, spread, count, heat):
     return out
 
 
+def oil_damage(cloud: Cloud, seed: int, blots: int = 16) -> Cloud:
+    """Splash dark oil over the robot: blobs that drip downward, mostly on the front/top."""
+    rng = np.random.default_rng(seed)
+    lo, hi = robot_dims(cloud)
+    c = cloud.c.copy()
+    # bias blot centers toward the front (+x) and upper half
+    score = (cloud.p[:, 0] - lo[0]) / (hi[0] - lo[0] + 1e-9) + (cloud.p[:, 2] - lo[2]) / (hi[2] - lo[2] + 1e-9)
+    cand = np.nonzero(score > np.quantile(score, 0.45))[0]
+    for i in rng.choice(cand, size=blots, replace=False):
+        ctr, r = cloud.p[i], rng.uniform(0.06, 0.14)
+        d = cloud.p - ctr
+        drip = np.where(d[:, 2] < 0, 0.35, 1.0)     # runs farther downward than upward
+        dist = np.sqrt(d[:, 0] ** 2 + d[:, 1] ** 2 + (d[:, 2] * drip) ** 2)
+        a = np.clip(1.25 - dist / r, 0, 1)[:, None] * 0.95
+        # wet sheen: a few lighter specks inside each blot
+        sheen = (rng.random(len(c)) < 0.12)[:, None] * np.array([0.10, 0.10, 0.16])
+        c = c * (1 - a) + (OIL + sheen) * a
+    return Cloud(cloud.p, cloud.n, c)
+
+
+def hunter_eyes(cloud: Cloud):
+    """Two glowing red eyes on the robot's upper front surface (not the bumper)."""
+    lo, hi = robot_dims(cloud)
+    z = lo[2] + 0.78 * (hi[2] - lo[2])
+    eyes = []
+    for y in (-0.11, 0.11):
+        band = (np.abs(cloud.p[:, 2] - z) < 0.03) & (np.abs(cloud.p[:, 1] - y) < 0.03)
+        x = cloud.p[band, 0].max() if band.any() else hi[0]
+        eyes.append((np.array([x + 0.01, y, z]), 0.032, (1.0, 0.06, 0.04)))
+    return eyes
+
+
+def sparks(rng, center, count):
+    out = []
+    for _ in range(count):
+        off = rng.normal(0, 0.09, 3)
+        out.append((center + off, rng.uniform(0.012, 0.025), (1.0, 0.85 + 0.15 * rng.random(), 0.35)))
+    return out
+
+
 def frame_pose(cloud: Cloud, role: str, k: int, n: int, rng):
     """Return (cloud, flashes) for a frame role at step k of n."""
     lo, hi = robot_dims(cloud)
@@ -221,7 +268,9 @@ def frame_pose(cloud: Cloud, role: str, k: int, n: int, rng):
         muzzle = np.array([hi[0] + 0.05, 0.0, lo[2] + 0.62 * height])
         return cloud, [(muzzle, 0.085, (1.0, 0.75, 0.2))]
     if role == "pain":
-        return transformed(cloud, tint=(1.0, 0.25, 0.15), tint_amt=0.45), []
+        # robots don't bleed: a shower of sparks and a splash of oil
+        hurt = oil_damage(cloud, seed=int(rng.integers(1 << 30)), blots=6)
+        return hurt, sparks(rng, np.array([hi[0] * 0.6, 0.0, lo[2] + 0.6 * height]), 7)
     if role == "death":
         t = k / max(n - 1, 1)
         ang = 90.0 * min(1.0, t * 1.25) ** 1.6
@@ -298,6 +347,31 @@ def encode_patch(idx: np.ndarray, alpha: np.ndarray, left: int, top: int) -> byt
     return header + struct.pack(f"<{w}i", *offs) + b"".join(cols)
 
 
+def decode_patch(data: bytes):
+    """Doom picture -> (index image, alpha mask, left, top)."""
+    w, h, left, top = struct.unpack_from("<hhhh", data)
+    offs = struct.unpack_from(f"<{w}i", data, 8)
+    idx = np.zeros((h, w), np.uint8)
+    alpha = np.zeros((h, w), bool)
+    for x, o in enumerate(offs):
+        while data[o] != 0xFF:
+            y0, n = data[o], data[o + 1]
+            idx[y0 : y0 + n, x] = np.frombuffer(data[o + 3 : o + 3 + n], np.uint8)
+            alpha[y0 : y0 + n, x] = True
+            o += n + 4
+    return idx, alpha, left, top
+
+
+def oilify_patch(data: bytes, palette: np.ndarray) -> bytes:
+    """Recolor a (blood) sprite as oil, keeping its shape and offsets."""
+    idx, alpha, left, top = decode_patch(data)
+    rgb = palette[idx] / 255.0
+    lum = rgb.max(axis=2, keepdims=True)
+    oil = OIL + lum * np.array([0.22, 0.21, 0.28])   # darker where the blood was dark
+    rgba = np.concatenate([np.clip(oil * 255, 0, 255), alpha[..., None] * 255.0], 2).astype(np.uint8)
+    return encode_patch(quantize(rgba, palette), alpha, left, top)
+
+
 def to_patch(rgba, origin, palette, sink=2):
     alpha = rgba[..., 3] > 0
     if not alpha.any():
@@ -336,9 +410,17 @@ def main():
 
     lumps = [Lump("S_START", b"")]
     previews = []
+    clouds: dict[str, Cloud] = {}
     for mon in MONSTERS:
-        cloud = load_robot(Path(mon.robot), args.points, rng)
-        names = [nm for nm in sprite_names if nm.startswith(mon.prefix)]
+        if mon.robot not in clouds:
+            clouds[mon.robot] = load_robot(Path(mon.robot), args.points, rng)
+        cloud = clouds[mon.robot]
+        if mon.hunter:
+            cloud = oil_damage(cloud, seed=26, blots=24)
+            cloud = Cloud(cloud.p, cloud.n, cloud.c * np.array([0.82, 0.82, 0.88]))  # gunmetal
+            names = HUNT_NAMES
+        else:
+            names = [nm for nm in sprite_names if nm.startswith(mon.prefix)]
         rot0 = sorted({nm[4] for nm in names if nm[5] == "0"})
         gib = [f for f in rot0 if f not in mon.death]
         cache = {}
@@ -358,8 +440,12 @@ def main():
             key = (frame, rot)
             if key not in cache:
                 role, k, n = role_of(frame)
-                pose, flashes = frame_pose(cloud, role, k, n, np.random.default_rng(hash((mon.prefix, frame)) & 0xFFFF))
+                seed = zlib.crc32(f"{mon.prefix}{frame}".encode())  # stable across runs
+                pose, flashes = frame_pose(cloud, role, k, n, np.random.default_rng(seed))
                 theta = 25.0 if rot == 0 else (rot - 1) * 45.0
+                # eyes only when the robot's front faces the camera (else they show through it)
+                if mon.hunter and role in ("walk", "aim", "fire", "pain") and math.cos(math.radians(theta)) > 0.2:
+                    flashes = flashes + hunter_eyes(pose)
                 cache[key] = to_patch(*render(pose, theta, args.ppm, flashes), palette)
             return cache[key]
 
@@ -370,6 +456,11 @@ def main():
             if rot in (0, 1, 3) or nm == names[0]:
                 previews.append((mon.prefix, nm, idx, alpha))
         log(f"{mon.prefix} <- {Path(mon.robot).name}: {len(names)} lumps, {len(cache)} unique views")
+    # robots bleed oil: recolor the IWAD's blood sprites
+    for nm in [n for n in sprite_names if n.startswith("BLUD")]:
+        data = next(l.data for l in iw if l.name == nm)
+        lumps.append(Lump(nm, oilify_patch(data, palette)))
+        log(f"{nm} -> oil")
     lumps.append(Lump("S_END", b""))
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     write_wad(args.out, lumps)

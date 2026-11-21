@@ -1,8 +1,35 @@
 diff --git a/gameplay/src/info.rs b/gameplay/src/info.rs
-index 49e85fc..2329ef3 100644
+index 49e85fc..7e4d00e 100644
 --- a/gameplay/src/info.rs
 +++ b/gameplay/src/info.rs
-@@ -228,6 +228,8 @@ MT_MISC62, MT_MISC63, MT_MISC64, MT_MISC65, MT_MISC66, MT_MISC67, MT_MISC68, MT_
+@@ -23,7 +23,8 @@ pub const SPRNAMES: [&str; NUM_SPRNAMES] = [
+ "COL5", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT", "HDB1", 
+ "HDB2", "HDB3", "HDB4", "HDB5", "HDB6", "POB1", "POB2", "BRS1", 
+ "TLMP", "TLP2", 
+-
++// doomMod hunter
++"HUNT",
+ ];
+ 
+ #[repr(u16)]
+@@ -48,6 +49,7 @@ CAND, CBRA, COL6, TRE1, TRE2, ELEC, CEYE, FSKU,
+ COL5, TBLU, TGRN, TRED, SMBT, SMGT, SMRT, HDB1, 
+ HDB2, HDB3, HDB4, HDB5, HDB6, POB1, POB2, BRS1, 
+ TLMP, TLP2, 
++HUNT,
+ Count,
+ }
+ impl Default for SpriteNum {
+@@ -196,6 +198,8 @@ REDTORCH3, REDTORCH4, BTORCHSHRT, BTORCHSHRT2, BTORCHSHRT3, BTORCHSHRT4, GTORCHS
+ GTORCHSHRT3, GTORCHSHRT4, RTORCHSHRT, RTORCHSHRT2, RTORCHSHRT3, RTORCHSHRT4, HANGNOGUTS, HANGBNOBRAIN, 
+ HANGTLOOKDN, HANGTSKULL, HANGTLOOKUP, HANGTNOBRAIN, COLONGIBS, SMALLPOOL, BRAINSTEM, TECHLAMP, 
+ TECHLAMP2, TECHLAMP3, TECHLAMP4, TECH2LAMP, TECH2LAMP2, TECH2LAMP3, TECH2LAMP4, 
++// doomMod hunter
++HUNT_STND, HUNT_STND2, HUNT_RUN1, HUNT_RUN2, HUNT_RUN3, HUNT_RUN4, HUNT_RUN5, HUNT_RUN6, HUNT_RUN7, HUNT_RUN8, HUNT_MISS1, HUNT_MISS2, HUNT_MISS3, HUNT_FIST1, HUNT_FIST2, HUNT_FIST3, HUNT_PAIN, HUNT_PAIN2, HUNT_DIE1, HUNT_DIE2, HUNT_DIE3, HUNT_DIE4, HUNT_DIE5, HUNT_XDIE1, HUNT_XDIE2, HUNT_XDIE3, HUNT_XDIE4, HUNT_XDIE5, HUNT_XDIE6, HUNT_XDIE7, HUNT_XDIE8, HUNT_XDIE9,
+ Count,
+ }
+ impl From<u16> for StateNum {
+@@ -228,6 +232,8 @@ MT_MISC62, MT_MISC63, MT_MISC64, MT_MISC65, MT_MISC66, MT_MISC67, MT_MISC68, MT_
  MT_MISC70, MT_MISC71, MT_MISC72, MT_MISC73, MT_MISC74, MT_MISC75, MT_MISC76, MT_MISC77, 
  MT_MISC78, MT_MISC79, MT_MISC80, MT_MISC81, MT_MISC82, MT_MISC83, MT_MISC84, MT_MISC85, 
  MT_MISC86, 
@@ -11,29 +38,324 @@ index 49e85fc..2329ef3 100644
  Count,
  }
  impl MapObjKind {
-@@ -12680,4 +12682,33 @@ pub const MOBJINFO: [MapObjInfo; NUM_CATEGORIES] = [
+@@ -9082,6 +9088,294 @@ pub static STATES: [StateData; NUM_STATES] = [
+         misc1: 0,
+         misc2: 0,
+     },
++    StateData { // S_HUNT_STND
++        sprite: SpriteNum::HUNT,
++        frame: 0,
++        tics: 10,
++        action: ActionId::ALook,
++        next_state: StateNum::HUNT_STND2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_STND2
++        sprite: SpriteNum::HUNT,
++        frame: 1,
++        tics: 10,
++        action: ActionId::ALook,
++        next_state: StateNum::HUNT_STND,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN1
++        sprite: SpriteNum::HUNT,
++        frame: 0,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN2
++        sprite: SpriteNum::HUNT,
++        frame: 0,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN3,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN3
++        sprite: SpriteNum::HUNT,
++        frame: 1,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN4,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN4
++        sprite: SpriteNum::HUNT,
++        frame: 1,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN5,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN5
++        sprite: SpriteNum::HUNT,
++        frame: 2,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN6,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN6
++        sprite: SpriteNum::HUNT,
++        frame: 2,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN7,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN7
++        sprite: SpriteNum::HUNT,
++        frame: 3,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN8,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_RUN8
++        sprite: SpriteNum::HUNT,
++        frame: 3,
++        tics: 3,
++        action: ActionId::AChase,
++        next_state: StateNum::HUNT_RUN1,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_MISS1
++        sprite: SpriteNum::HUNT,
++        frame: 4,
++        tics: 10,
++        action: ActionId::AFacetarget,
++        next_state: StateNum::HUNT_MISS2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_MISS2
++        sprite: SpriteNum::HUNT,
++        frame: 32773,
++        tics: 10,
++        action: ActionId::ASkelmissile,
++        next_state: StateNum::HUNT_MISS3,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_MISS3
++        sprite: SpriteNum::HUNT,
++        frame: 4,
++        tics: 10,
++        action: ActionId::AFacetarget,
++        next_state: StateNum::HUNT_RUN1,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_FIST1
++        sprite: SpriteNum::HUNT,
++        frame: 4,
++        tics: 6,
++        action: ActionId::AFacetarget,
++        next_state: StateNum::HUNT_FIST2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_FIST2
++        sprite: SpriteNum::HUNT,
++        frame: 4,
++        tics: 6,
++        action: ActionId::ASkelwhoosh,
++        next_state: StateNum::HUNT_FIST3,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_FIST3
++        sprite: SpriteNum::HUNT,
++        frame: 5,
++        tics: 6,
++        action: ActionId::ASkelfist,
++        next_state: StateNum::HUNT_RUN1,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_PAIN
++        sprite: SpriteNum::HUNT,
++        frame: 6,
++        tics: 3,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_PAIN2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_PAIN2
++        sprite: SpriteNum::HUNT,
++        frame: 6,
++        tics: 3,
++        action: ActionId::APain,
++        next_state: StateNum::HUNT_RUN1,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_DIE1
++        sprite: SpriteNum::HUNT,
++        frame: 7,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_DIE2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_DIE2
++        sprite: SpriteNum::HUNT,
++        frame: 8,
++        tics: 5,
++        action: ActionId::AScream,
++        next_state: StateNum::HUNT_DIE3,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_DIE3
++        sprite: SpriteNum::HUNT,
++        frame: 9,
++        tics: 5,
++        action: ActionId::AFall,
++        next_state: StateNum::HUNT_DIE4,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_DIE4
++        sprite: SpriteNum::HUNT,
++        frame: 10,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_DIE5,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_DIE5
++        sprite: SpriteNum::HUNT,
++        frame: 11,
++        tics: -1,
++        action: ActionId::None,
++        next_state: StateNum::None,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE1
++        sprite: SpriteNum::HUNT,
++        frame: 12,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE2,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE2
++        sprite: SpriteNum::HUNT,
++        frame: 13,
++        tics: 5,
++        action: ActionId::AXscream,
++        next_state: StateNum::HUNT_XDIE3,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE3
++        sprite: SpriteNum::HUNT,
++        frame: 14,
++        tics: 5,
++        action: ActionId::AFall,
++        next_state: StateNum::HUNT_XDIE4,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE4
++        sprite: SpriteNum::HUNT,
++        frame: 15,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE5,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE5
++        sprite: SpriteNum::HUNT,
++        frame: 16,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE6,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE6
++        sprite: SpriteNum::HUNT,
++        frame: 17,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE7,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE7
++        sprite: SpriteNum::HUNT,
++        frame: 18,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE8,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE8
++        sprite: SpriteNum::HUNT,
++        frame: 19,
++        tics: 5,
++        action: ActionId::None,
++        next_state: StateNum::HUNT_XDIE9,
++        misc1: 0,
++        misc2: 0,
++    },
++    StateData { // S_HUNT_XDIE9
++        sprite: SpriteNum::HUNT,
++        frame: 20,
++        tics: -1,
++        action: ActionId::None,
++        next_state: StateNum::None,
++        misc1: 0,
++        misc2: 0,
++    },
+ ];
+ 
+ use crate::thing::MapObjFlag;
+@@ -12680,4 +12974,33 @@ pub const MOBJINFO: [MapObjInfo; NUM_CATEGORIES] = [
          flags: MapObjFlag::from_bits_truncate(MapObjFlag::Noblockmap.bits()),
          raisestate: StateNum::None,
      },
-+    // MT_HUNTER (doomMod): a tougher, faster Revenant-based stalker that always
-+    // knows where the player is and respawns 20 s after it dies.
++    // MT_HUNTER (doomMod): 2026 KitBot with red eyes and oil damage (sprite HUNT).
++    // Revenant missile/fist, always knows where the player is, respawns 10-30 s after death.
 +    MapObjInfo {
 +        doomednum: 30001,
 +        // Idle in the look state: its run state calls A_Chase, which falls back to the
 +        // spawn state when the player dies and would recurse forever.
-+        spawnstate: StateNum::SKEL_STND,
++        spawnstate: StateNum::HUNT_STND,
 +        spawnhealth: 1200,
-+        seestate: StateNum::SKEL_RUN1,
++        seestate: StateNum::HUNT_RUN1,
 +        seesound: SfxName::Skesit,
 +        reactiontime: 8,
 +        attacksound: SfxName::None,
-+        painstate: StateNum::SKEL_PAIN,
++        painstate: StateNum::HUNT_PAIN,
 +        painchance: 30,
 +        painsound: SfxName::Popain,
-+        meleestate: StateNum::SKEL_FIST1,
-+        missilestate: StateNum::SKEL_MISS1,
-+        deathstate: StateNum::SKEL_DIE1,
-+        xdeathstate: StateNum::None,
++        meleestate: StateNum::HUNT_FIST1,
++        missilestate: StateNum::HUNT_MISS1,
++        deathstate: StateNum::HUNT_DIE1,
++        xdeathstate: StateNum::HUNT_XDIE1,
 +        deathsound: SfxName::Skedth,
 +        speed: 14,
 +        radius: 20.0,
@@ -75,32 +397,141 @@ index a18fe2f..7384db2 100644
          return;
      }
  
+diff --git a/gameplay/src/thing/interact.rs b/gameplay/src/thing/interact.rs
+index 3d8c7d5..e6b4d9a 100644
+--- a/gameplay/src/thing/interact.rs
++++ b/gameplay/src/thing/interact.rs
+@@ -214,6 +214,7 @@ impl MapObject {
+ 
+         self.flags.insert(MapObjFlag::Corpse | MapObjFlag::Dropoff);
+         self.height = self.height / 4;
++        self.arm_robot_respawn();
+ 
+         if let Some(source) = source.as_mut() {
+             if let Some(player) = source.player_mut() {
+@@ -665,3 +666,68 @@ mod damage_tests {
+         assert_eq!(get_prndindex(), before);
+     }
+ }
++
++#[cfg(test)]
++mod frc_robot_respawn_tests {
++    //! doomMod: KitBot robots (zombie types) and the hunter respawn 10-30 s after
++    //! dying, regardless of skill or `-respawn`; other monsters still don't.
++    use crate::MapObjKind;
++    use crate::doom_def::TICRATE;
++    use crate::test_support::{TestLevel, rng_guard};
++
++    const X: i32 = 1056;
++    const Y: i32 = -3616;
++
++    fn live(level: &mut TestLevel, kind: MapObjKind) -> usize {
++        let (lvl, _, _) = level.parts_mut();
++        let mut n = 0;
++        lvl.thinkers.find_thinker_mut(|t| {
++            if t.is_mobj() && t.mobj().kind == kind && t.mobj().health > 0 {
++                n += 1;
++            }
++            false
++        });
++        n
++    }
++
++    /// Kill a freshly spawned `kind` and return the tic it came back on (if any).
++    fn respawn_tic(kind: MapObjKind, max_tics: u32) -> Option<u32> {
++        let mut level = TestLevel::load("E1M1");
++        let mobj = level.spawn(X, Y, kind);
++        mobj.spawnpoint.x = X as i16;
++        mobj.spawnpoint.y = Y as i16;
++        mobj.p_take_damage(None, None, 10_000);
++        assert_eq!(live(&mut level, kind), 0, "{kind:?} should be dead");
++        for tic in 1..=max_tics {
++            level.run_level_tics(1);
++            if live(&mut level, kind) > 0 {
++                return Some(tic);
++            }
++        }
++        None
++    }
++
++    #[test]
++    fn robots_respawn_between_10_and_30_seconds() {
++        let _g = rng_guard();
++        for kind in [
++            MapObjKind::MT_POSSESSED,
++            MapObjKind::MT_SHOTGUY,
++            MapObjKind::MT_CHAINGUY,
++            MapObjKind::MT_HUNTER,
++        ] {
++            let tic = respawn_tic(kind, 31 * TICRATE as u32)
++                .unwrap_or_else(|| panic!("{kind:?} did not respawn within 31 s"));
++            assert!(
++                tic >= 10 * TICRATE as u32,
++                "{kind:?} respawned too early: {tic} tics"
++            );
++        }
++    }
++
++    #[test]
++    fn other_monsters_stay_dead() {
++        let _g = rng_guard();
++        assert_eq!(respawn_tic(MapObjKind::MT_TROOP, 60 * TICRATE as u32), None);
++    }
++}
 diff --git a/gameplay/src/thing/mod.rs b/gameplay/src/thing/mod.rs
-index 6c10cb0..7496018 100644
+index 6c10cb0..79a96d0 100644
 --- a/gameplay/src/thing/mod.rs
 +++ b/gameplay/src/thing/mod.rs
-@@ -1277,18 +1277,21 @@ impl Think for MapObject {
+@@ -1190,6 +1190,25 @@ impl MapObject {
+     }
+ 
+     /// P_NightmareRespawn
++    /// doomMod: the KitBot enemies and the hunter respawn on their own.
++    pub(crate) fn is_frc_robot(&self) -> bool {
++        matches!(
++            self.kind,
++            MapObjKind::MT_HUNTER
++                | MapObjKind::MT_POSSESSED
++                | MapObjKind::MT_SHOTGUY
++                | MapObjKind::MT_CHAINGUY
++        )
++    }
++
++    /// doomMod: start a robot's respawn timer (10-30 s) when it dies.
++    pub(crate) fn arm_robot_respawn(&mut self) {
++        if self.is_frc_robot() {
++            self.movecount = 0;
++            self.threshold = 10 * TICRATE + p_random() * (20 * TICRATE) / 255;
++        }
++    }
++
+     pub fn nightmare_respawn(&mut self) {
+         let sp_x = FixedT::from(self.spawnpoint.x as i32);
+         let sp_y = FixedT::from(self.spawnpoint.y as i32);
+@@ -1277,18 +1296,22 @@ impl Think for MapObject {
              if !this.flags.contains(MapObjFlag::Countkill) {
                  return false;
              }
 -            if !level.options.respawn_monsters {
-+            // doomMod: the hunter always comes back, regardless of skill/-respawn
-+            let hunter = this.kind == MapObjKind::MT_HUNTER;
-+            if !level.options.respawn_monsters && !hunter {
++            // doomMod: FRC robots always come back after the delay armed in `kill`,
++            // regardless of skill/-respawn
++            let robot = this.is_frc_robot();
++            if !level.options.respawn_monsters && !robot {
                  return false;
              }
              this.movecount += 1;
  
 -            if this.movecount < 12 * TICRATE {
-+            let delay = if hunter { 20 * TICRATE } else { 12 * TICRATE };
++            let delay = if robot { this.threshold } else { 12 * TICRATE };
 +            if this.movecount < delay {
                  return false;
              }
-             if (level.level_time & 31) != 0 {
+-            if (level.level_time & 31) != 0 {
++            if !robot && (level.level_time & 31) != 0 {
                  return false;
              }
 -            if p_random() > 4 {
-+            if !hunter && p_random() > 4 {
++            if !robot && p_random() > 4 {
                  return false;
              }
              this.nightmare_respawn();
