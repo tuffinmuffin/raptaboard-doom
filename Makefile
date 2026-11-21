@@ -2,7 +2,7 @@ PY := .venv/bin/python -I
 R4D := vendor/room4doom
 IWAD := downloads/freedoom/freedoom2.wad
 
-.PHONY: setup assets wad sprites check engine play clean
+.PHONY: setup assets wad sprites face check engine play clean
 
 setup:
 	python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
@@ -30,6 +30,11 @@ sprites: build/robots.wad
 build/robots.wad: tools/robot_sprites.py
 	$(PY) tools/robot_sprites.py
 
+# Pixel-art robot faces for the status bar (replaces the STF* faces)
+face: build/face.wad
+build/face.wad: tools/robot_face.py
+	$(PY) tools/robot_face.py
+
 check: wad
 	$(PY) tools/check_udmf.py build/frc2026.wad
 
@@ -43,8 +48,8 @@ engine: $(R4D)
 	cd $(R4D) && (git apply --reverse --check ../../patches/room4doom.patch 2>/dev/null || git apply ../../patches/room4doom.patch)
 	cd $(R4D) && cargo build --release -p room4doom
 
-play: wad sprites
-	$(R4D)/target/release/room4doom -i $(IWAD) -p build/frc2026.wad -p build/robots.wad -m 1
+play: wad sprites face
+	$(R4D)/target/release/room4doom -i $(IWAD) -p build/frc2026.wad -p build/robots.wad -p build/face.wad -m 1
 
 clean:
 	rm -rf build

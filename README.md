@@ -12,7 +12,7 @@ Doom ports (it uses UDMF with Doom-numbered specials and a custom monster).
 make setup assets   # python venv; field/KitBot GLBs + Freedoom Phase 2 into downloads/
 make check          # build/frc2026.wad + validation + build/frc2026_preview.png
 make engine         # clone room4doom at the pinned rev, apply our patch, cargo build
-make play           # MAP01 with freedoom2.wad + build/robots.wad (renders sprites on first run)
+make play           # MAP01 with freedoom2.wad + robot sprites + robot face (renders on first run)
 ```
 
 ## What's in the map
@@ -33,6 +33,10 @@ make play           # MAP01 with freedoom2.wad + build/robots.wad (renders sprit
   eyes and oil splatter. It always knows where you are, has 1200 HP, fires homing
   rockets, punches, and comes back 10-30 s after you kill it.
 - **Oil, not blood**: robots spark and leak oil when hit; the blood sprites are recolored.
+- **Robot status-bar face**: the Doomguy face is a pixel-art robot head
+  (`tools/robot_face.py` → `build/face.wad`): LED eyes that look around and shift
+  green → red as health drops, dents, oil and a cracked visor with damage, plus ouch,
+  evil-grin, rampage, god-mode and dead expressions. `build/face_preview.png` shows all 42.
 - **Optional endless waves**: `--spawn-spots 10` adds Doom II's monster spawner
   (stock Doom II monsters every ~5 s). Off by default.
 
