@@ -1,5 +1,5 @@
 diff --git a/gameplay/src/info.rs b/gameplay/src/info.rs
-index 49e85fc..45a36a5 100644
+index 49e85fc..2329ef3 100644
 --- a/gameplay/src/info.rs
 +++ b/gameplay/src/info.rs
 @@ -228,6 +228,8 @@ MT_MISC62, MT_MISC63, MT_MISC64, MT_MISC65, MT_MISC66, MT_MISC67, MT_MISC68, MT_
@@ -11,7 +11,7 @@ index 49e85fc..45a36a5 100644
  Count,
  }
  impl MapObjKind {
-@@ -12680,4 +12682,31 @@ pub const MOBJINFO: [MapObjInfo; NUM_CATEGORIES] = [
+@@ -12680,4 +12682,33 @@ pub const MOBJINFO: [MapObjInfo; NUM_CATEGORIES] = [
          flags: MapObjFlag::from_bits_truncate(MapObjFlag::Noblockmap.bits()),
          raisestate: StateNum::None,
      },
@@ -19,7 +19,9 @@ index 49e85fc..45a36a5 100644
 +    // knows where the player is and respawns 20 s after it dies.
 +    MapObjInfo {
 +        doomednum: 30001,
-+        spawnstate: StateNum::SKEL_RUN1,
++        // Idle in the look state: its run state calls A_Chase, which falls back to the
++        // spawn state when the player dies and would recurse forever.
++        spawnstate: StateNum::SKEL_STND,
 +        spawnhealth: 1200,
 +        seestate: StateNum::SKEL_RUN1,
 +        seesound: SfxName::Skesit,
@@ -44,7 +46,7 @@ index 49e85fc..45a36a5 100644
 +    },
  ];
 diff --git a/gameplay/src/thing/enemy.rs b/gameplay/src/thing/enemy.rs
-index a18fe2f..1842637 100644
+index a18fe2f..7384db2 100644
 --- a/gameplay/src/thing/enemy.rs
 +++ b/gameplay/src/thing/enemy.rs
 @@ -162,14 +162,14 @@ pub(crate) fn a_chase(actor: &mut MapObject) {
@@ -64,6 +66,15 @@ index a18fe2f..1842637 100644
              return; // Found a new target
          }
          actor.set_state(actor.info.spawnstate);
+@@ -268,7 +268,7 @@ pub(crate) fn a_look(actor: &mut MapObject) {
+             goto_seeyou = true;
+         }
+     }
+-    if !goto_seeyou && !actor.look_for_players(false) {
++    if !goto_seeyou && !actor.hunter_acquire() && !actor.look_for_players(false) {
+         return;
+     }
+ 
 diff --git a/gameplay/src/thing/mod.rs b/gameplay/src/thing/mod.rs
 index 6c10cb0..7496018 100644
 --- a/gameplay/src/thing/mod.rs

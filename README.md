@@ -19,8 +19,9 @@ make play           # MAP01 with freedoom2.wad
 
 - **The field**: hubs, bumps, trench (drivable underneath), guardrails, driver stations.
 - **Towers + elevators**: each alliance tower is a platform at its upright height
-  (1.83 m), with a lift pad on the field side. Press *use* on the lift face to bring
-  it down; it rises after 3 s. Stepping from the tower top onto the pad sends it down.
+  (1.83 m), with a lift pad on the field side that rests on the carpet. Walk onto it and
+  it starts cycling up to the tower top and back down, waiting 3 s at each end
+  (Doom's perpetual lift, special 87).
   BFG on the red tower top, megasphere on the blue one.
 - **Fuel → loot**: reachable Fuel balls become a weighted mix of ammo, health and armor,
   and six spread-out ones become weapons (shotgun, super shotgun, chaingun, rocket

@@ -303,8 +303,7 @@ PICKUPS = [
 STARTING_MONSTERS = [3004, 9, 3001, 3002]  # zombieman, shotgunner, imp, demon
 
 # Doom line/sector specials
-SP_LIFT_SR = 62      # SR lower lift, wait, raise (press use on the lift face)
-SP_LIFT_WR = 88      # WR same, walk-over (top of the tower -> step onto the lift)
+SP_LIFT_PERPETUAL = 87  # WR perpetual lift: cycles lowest <-> highest neighbour floor, 3 s waits
 LIFT_TEX = "PLAT1"
 LIFT_DEPTH_M = 0.75  # lift pad depth in front of the tower
 
@@ -365,17 +364,21 @@ def main():
         j0, j1 = int(np.floor((y0 - origin[1]) / cell)), int(np.ceil((y1 - origin[1]) / cell))
         return slice(max(i0, 0), min(i1, nx)), slice(max(j0, 0), min(j1, ny))
 
-    # -------- towers: solid platform at the uprights' height, lift pad on the field side
+    # -------- towers: solid platform at the uprights' height, lift pad on the field side.
+    # The lift rests on the carpet; walking onto it starts it cycling up to the platform.
     tag = np.zeros((nx, ny), dtype=np.int64)
     tower_tops = {}  # side -> (x, y) center of the platform
     for t, side in enumerate(sorted(towers), start=1):
         x0, x1, y0, y1, ztop = towers[side]
         top = int(round(ztop * UNITS_PER_M / Z_BIN)) * Z_BIN
         plat = box(x0, x1, y0, y1)
-        floor_u[plat], ceil_u[plat], colors[plat] = top, SKY_H, (0.79, 0.79, 0.79)
+        taller = floor_u[plat] > top  # keep the alliance wall behind the tower
+        floor_u[plat] = np.where(taller, floor_u[plat], top)
+        colors[plat] = np.where(taller[..., None], colors[plat], (0.79, 0.79, 0.79))
+        ceil_u[plat] = SKY_H
         lx0, lx1 = (x0 - LIFT_DEPTH_M, x0) if side > 0 else (x1, x1 + LIFT_DEPTH_M)
         lift = box(lx0, lx1, y0, y1)
-        floor_u[lift], ceil_u[lift], colors[lift], tag[lift] = top, SKY_H, (0.96, 0.6, 0.05), t
+        floor_u[lift], ceil_u[lift], colors[lift], tag[lift] = 0, SKY_H, (0.96, 0.6, 0.05), t
         tower_tops[side] = ((x0 + x1) / 2, (y0 + y1) / 2)
         log(f"tower {'blue' if side > 0 else 'red'}: top {top}u, lift tag {t}")
 
@@ -427,7 +430,9 @@ def main():
 
     def side(sec, other):
         parts = [f"sector = {sec}"]
-        if sec_floor[other] > sec_floor[sec]:
+        # lifts move, so their edges need a lower texture on both sides regardless of
+        # which floor is higher when the map is built
+        if sec_floor[other] > sec_floor[sec] or sec_tag[sec] or sec_tag[other]:
             parts.append(f'texturebottom = "{sec_wall[other]}"')
         if sec_ceil[other] < sec_ceil[sec]:
             parts.append(f'texturetop = "{sec_wall[other]}"')
@@ -448,13 +453,9 @@ def main():
         extra = ""
         t = sec_tag[right] or sec_tag[left]
         if t and not (sec_tag[right] and sec_tag[left]):
-            lift, other = (right, left) if sec_tag[right] else (left, right)
-            if sec_floor[other] >= sec_floor[lift]:
-                extra = f" special = {SP_LIFT_WR}; id = {t};"          # tower top -> lift
-            else:
-                extra = f" special = {SP_LIFT_SR}; id = {t};"          # use the lift face
-                if right == lift:  # switches only work from the front side
-                    x0, y0, x1, y1, right, left = x1, y1, x0, y0, left, right
+            # walking onto the pad (from the carpet or the tower top) starts the cycle;
+            # re-triggering an already moving lift does nothing
+            extra = f" special = {SP_LIFT_PERPETUAL}; id = {t};"
             nlift += 1
         v1, v2 = vertex(x0, y0), vertex(x1, y1)
         sides.append(side(right, left))
