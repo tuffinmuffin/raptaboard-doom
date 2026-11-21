@@ -1,0 +1,6 @@
+downloads/
+.venv/
+build/
+target/
+vendor/
+*.pyc
