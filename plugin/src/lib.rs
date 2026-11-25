@@ -56,6 +56,8 @@ struct Running {
     sound: Receiver<SoundAction>,
     /// Steps run so far, against the clock.
     tics: u64,
+    /// The game's menu showed after the last step: the scene is dimmed under it.
+    menu_open: bool,
     /// The frame's time the game started at.
     started_s: f64,
     /// Doom keys held, so all can be let go when the tab loses the keyboard.
@@ -153,6 +155,7 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         screen,
         sound,
         tics: 0,
+        menu_open: false,
         started_s: time_s,
         held: HashSet::new(),
         cheats: cheats::Cheats::new(),
@@ -332,7 +335,8 @@ impl Widget for Doom {
                 ev.apply_mouse_sensitivity((x, y));
                 r.mouse = (0.0, 0.0);
             }
-            display::run_game_tic(&mut r.game, &mut r.input, &mut r.menu, &mut r.machines);
+            r.menu_open =
+                display::run_game_tic(&mut r.game, &mut r.input, &mut r.menu, &mut r.machines);
             r.tics += 1;
         }
         // Quit from the game's menu: end the game (its memory freed), give
@@ -357,6 +361,7 @@ impl Widget for Doom {
             &mut r.machines,
             &mut r.game,
             frac,
+            r.menu_open,
         );
         let (pixels, w, h) = r.screen.backend().frame();
         if w > 0 && h > 0 {

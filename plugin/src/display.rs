@@ -147,13 +147,16 @@ fn refresh_title_page(game: &mut Game) {
     }
 }
 
-/// Draw one frame, `frac` of the way from the last step to the next.
+/// Draw one frame, `frac` of the way from the last step to the next, the
+/// scene dimmed under the menu when `menu_open` (Doom's red menu text is hard
+/// to read over bright walls, scaled up in a window).
 pub fn d_display(
     screen: &mut RenderStack<u32>,
     menu: &mut impl SubsystemTrait,
     machines: &mut Machines,
     game: &mut Game,
     frac: f32,
+    menu_open: bool,
 ) {
     let wipe = game.gamestate != game.wipe_game_state;
     if wipe && !screen.is_wiping() {
@@ -197,11 +200,36 @@ pub fn d_display(
         }
         GameState::ForceWipe => {}
     }
+    if menu_open {
+        dim(screen.screen_frame().buf_mut());
+    }
     menu.draw(screen.screen_frame());
     screen.upload_ui();
     screen.present(wipe);
     if wipe && screen.do_wipe() {
         game.wipe_game_state = game.gamestate;
         game.players[game.consoleplayer].save_prev_render();
+    }
+}
+
+/// Darken ARGB pixels to 3/8 of their brightness.
+fn dim(pixels: &mut [u32]) {
+    for p in pixels {
+        let half = (*p >> 1) & 0x007F_7F7F;
+        let eighth = (*p >> 3) & 0x001F_1F1F;
+        *p = 0xFF00_0000 | (half - eighth);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Tests written by Claude.
+    use super::*;
+
+    #[test]
+    fn dimming_darkens_each_channel_and_keeps_alpha() {
+        let mut px = [0xFFFF_8040, 0xFF00_0000, 0xFF10_2030];
+        dim(&mut px);
+        assert_eq!(px, [0xFF60_3018, 0xFF00_0000, 0xFF06_0C12]);
     }
 }
