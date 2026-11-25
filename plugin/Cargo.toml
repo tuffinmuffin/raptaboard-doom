@@ -31,6 +31,9 @@ render-backend = { path = "../vendor/room4doom/render/backend", default-features
 pic-data = { path = "../vendor/room4doom/pic-data" }
 wad = { path = "../vendor/room4doom/wad" }
 sound-common = { path = "../vendor/room4doom/sound/common" }
+# The music: room4doom's OPL2 synthesizer (pure Rust; its rodio backend
+# needs an audio device, which a plugin doesn't have).
+opl2_emulator = { path = "../vendor/room4doom/sound/opl2_emulator" }
 math = { path = "../vendor/room4doom/math" }
 log = "0.4"
 # room4doom's config format, to write the controls for raptaboard's keys.

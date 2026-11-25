@@ -96,7 +96,9 @@ Controls: the arrows move and turn (W and S move too), A and D strafe, Ctrl fire
 uses (doors, lifts), Alt strafes with the arrows, Shift runs, 1 to 7 pick a weapon, Escape
 is the menu. The mouse turns, its left button fires and its right moves forward (held while
 the tab has the keyboard; Shift+Esc gives both back). Cheats work as in the standalone game
-(`iddqd`, `idkfa`, `idclip`, ...). Not yet: sound (the game's sound messages are dropped).
+(`iddqd`, `idkfa`, `idclip`, ...). Sound plays through raptaboard's speakers while its sound
+is on (the bell): the effects, panned and quieter with distance, and the music on the OPL2
+synthesizer, mixed in the plugin (room4doom's rodio backend, without its audio device).
 
 ## Robot sprites (`tools/robot_sprites.py`)
 
@@ -131,8 +133,7 @@ the trench. A flood fill from the start checks the field is sealed.
 ## Next steps
 
 - Split the converter from the map mods (a mod file layered on the base conversion).
-- The plugin's sound: a mixer for the sound effects and music (room4doom's rodio backend,
-  without rodio), into raptaboard's audio stream.
+- The plugin's settings and saved games, once raptaboard gives plugins storage.
 - A raptaboard content pack built from this repo's CI artifacts.
 - Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).
 
