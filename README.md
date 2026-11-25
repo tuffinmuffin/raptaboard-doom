@@ -83,13 +83,20 @@ raptaboard plugin dev build/plugin           # try it in raptaboard's sandbox
 
 `plugin/src/display.rs` is room4doom's frame drawing (`game-exe/src/d_main.rs`) kept to what
 an embedded software renderer needs; `plugin/src/keys.rs` maps raptaboard's key names to
-Doom's. It needs raptaboard with plugin API 0.3 and `[limits] memory_mb` (it runs at about
-105 MiB; the first frame loads the WADs, about 70 ms; each frame after about 1 ms).
+Doom's. It needs raptaboard with tuffinmuffin/raptaboard#103 (the mouse, `release-focus`,
+`[limits] call_ms`): it runs at about 105 MiB, loading the WADs or a level takes about
+60 ms to 200 ms, each frame about 1 ms.
+
+It opens on a title card (`tools/splash.py`: the KitBots and the hunter rendered from their
+CAD; `make splash`) and loads the game when clicked. Quitting from the game's menu gives the
+keyboard and mouse back to raptaboard and shows the card again; a click starts a new game in
+the data already loaded.
 
 Controls: the arrows move and turn (W and S move too), A and D strafe, Ctrl fires, Space
 uses (doors, lifts), Alt strafes with the arrows, Shift runs, 1 to 7 pick a weapon, Escape
-is the menu. Cheats work as in the standalone game (`iddqd`, `idkfa`, `idclip`, ...).
-Not yet: sound (the game's sound messages are dropped) and the mouse.
+is the menu. The mouse turns, its left button fires and its right moves forward (held while
+the tab has the keyboard; Shift+Esc gives both back). Cheats work as in the standalone game
+(`iddqd`, `idkfa`, `idclip`, ...). Not yet: sound (the game's sound messages are dropped).
 
 ## Robot sprites (`tools/robot_sprites.py`)
 

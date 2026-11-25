@@ -5,6 +5,12 @@
 //! 60 times a second between steps (room4doom interpolates), as a pixel
 //! frame. Keys come while the tab has the keyboard. The WADs are read from
 //! the plugin's own folder (`/pack`). Cheats work as in the standalone game.
+//!
+//! It opens on a title card (`splash.rgba` from the plugin's folder, made by
+//! tools/splash.py) and loads the game when clicked (or on Enter or Space).
+//! Quitting from the game's menu ends the game, gives the keyboard and mouse
+//! back to raptaboard and shows the title card again; a click then starts a new
+//! game in the data already loaded (freeing it would take about half a second).
 //! Sound isn't mixed yet: the game's sound messages are dropped.
 
 mod cheats;
@@ -56,6 +62,11 @@ struct Running {
     held: HashSet<KeyCode>,
     /// The cheat codes typed so far (`iddqd`).
     cheats: cheats::Cheats,
+    /// The mouse's movement since the last step (raptaboard may send several
+    /// between steps; the game takes one each step).
+    mouse: (f32, f32),
+    /// Mouse buttons held, let go with the keyboard.
+    buttons: HashSet<gamestate_traits::MouseBtn>,
 }
 
 #[derive(Default)]
@@ -63,6 +74,22 @@ struct Doom {
     running: Option<Running>,
     /// Why the game couldn't start.
     failed: Option<String>,
+    /// Clicked on the title card: start at the next render.
+    start: bool,
+    /// Quit from the game's menu: the title card shows, the game kept loaded.
+    quit: bool,
+    /// The title card, read once: width, height, RGBA (`None` if missing).
+    splash: Option<Option<(u32, u32, Vec<u8>)>>,
+}
+
+/// The title card from the plugin's folder: `splash.rgba`, width and height
+/// as little-endian u32, then RGBA rows (tools/splash.py).
+fn read_splash() -> Option<(u32, u32, Vec<u8>)> {
+    let bytes = raptaboard_plugin::pack_file("splash.rgba").ok()?;
+    let w = u32::from_le_bytes(bytes.get(0..4)?.try_into().ok()?);
+    let h = u32::from_le_bytes(bytes.get(4..8)?.try_into().ok()?);
+    let rgba = bytes.get(8..)?.to_vec();
+    (rgba.len() == w as usize * h as usize * 4).then_some((w, h, rgba))
 }
 
 /// The starting settings room4doom's own config gives, less what only a
@@ -129,6 +156,8 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         started_s: time_s,
         held: HashSet::new(),
         cheats: cheats::Cheats::new(),
+        mouse: (0.0, 0.0),
+        buttons: HashSet::new(),
     })
 }
 
@@ -177,6 +206,18 @@ fn fit(frame: &FrameInfo, w: u32, h: u32) -> (Point, Point) {
     )
 }
 
+/// A raptaboard mouse button as Doom's: left fires, right moves forward,
+/// middle strafes (room4doom's controls).
+fn mouse_button(b: MouseButton) -> Option<gamestate_traits::MouseBtn> {
+    use gamestate_traits::MouseBtn as M;
+    Some(match b {
+        MouseButton::Primary => M::Left,
+        MouseButton::Secondary => M::Right,
+        MouseButton::Middle => M::Middle,
+        _ => return None,
+    })
+}
+
 /// What a screen reader says for the game (and tests read): the player's
 /// health and armor, and god mode when it's on.
 fn summary(game: &Game) -> String {
@@ -185,8 +226,14 @@ fn summary(game: &Game) -> String {
     // In a level the health is its map object's; between levels, the status's.
     let health = player.mobj().map_or(status.health, |m| m.health);
     let god = status.cheats.contains(gameplay::PlayerCheat::Godmode);
+    // The weapon in hand's ammo (none for the fist and chainsaw).
+    let ammo = gameplay::WEAPON_INFO
+        .get(status.readyweapon as usize)
+        .and_then(|w| status.ammo.get(w.ammo as usize))
+        .map(|n| format!(", ammo {n}"))
+        .unwrap_or_default();
     format!(
-        "Doom: health {}, armor {}{}",
+        "Doom: health {}, armor {}{ammo}{}",
         health,
         status.armorpoints,
         if god { ", god mode" } else { "" }
@@ -200,7 +247,57 @@ impl Widget for Doom {
 
     fn render(&mut self, frame: FrameInfo) -> Picture {
         let mut picture = Picture::empty();
+        // Clicked after a Quit: a new game in the data already loaded.
+        if self.start
+            && self.quit
+            && let Some(r) = &mut self.running
+        {
+            use gamestate_traits::GameTraits as _;
+            let skill = r.game.options.skill;
+            r.game.defered_init_new(skill, 1, 1);
+            r.game.set_running(true);
+            r.started_s = frame.time_s;
+            r.tics = 0;
+            self.quit = false;
+            self.start = false;
+        }
+        // The title card, until clicked (and after Quit).
+        if (self.quit || self.running.is_none()) && !self.start && self.failed.is_none() {
+            let splash = self.splash.get_or_insert_with(read_splash);
+            match splash {
+                Some((w, h, rgba)) => {
+                    let aspect = *w as f32 / *h as f32;
+                    let (fw, fh) = (frame.size.width, frame.size.height);
+                    let (dw, dh) = if fw / fh > aspect {
+                        (fh * aspect, fh)
+                    } else {
+                        (fw, fw / aspect)
+                    };
+                    let min = Point {
+                        x: (fw - dw) / 2.0,
+                        y: (fh - dh) / 2.0,
+                    };
+                    picture.shape(Shape::Pixels(Pixels {
+                        min,
+                        max: Point {
+                            x: min.x + dw,
+                            y: min.y + dh,
+                        },
+                        width: *w,
+                        height: *h,
+                        rgba: rgba.clone(),
+                        smooth: true,
+                    }));
+                }
+                None => {
+                    picture.text(centered_text(&frame, "Doom: click to play", 20.0));
+                }
+            }
+            picture.summary = Some("Doom: click to play".into());
+            return picture;
+        }
         if self.running.is_none() && self.failed.is_none() {
+            self.start = false;
             let (w, h) = (frame.size.width as u32, frame.size.height as u32);
             match start(frame.time_s, w, h) {
                 Ok(r) => self.running = Some(r),
@@ -226,8 +323,30 @@ impl Widget for Doom {
             r.tics = due - MOST_TICS_A_FRAME;
         }
         while r.tics < due {
+            // The mouse's movement since the last step, as room4doom's window
+            // loop gives it (its acceleration, then sensitivity).
+            if r.mouse != (0.0, 0.0) {
+                let ev = &mut r.input.events;
+                let x = ev.apply_mouse_accel(r.mouse.0) as i32;
+                let y = ev.apply_mouse_accel(r.mouse.1) as i32;
+                ev.apply_mouse_sensitivity((x, y));
+                r.mouse = (0.0, 0.0);
+            }
             display::run_game_tic(&mut r.game, &mut r.input, &mut r.menu, &mut r.machines);
             r.tics += 1;
+        }
+        // Quit from the game's menu: end the game (its memory freed), give
+        // the keyboard and mouse back, and show the title card.
+        if !r.game.running() {
+            for kc in r.held.drain() {
+                r.input.events.unset_kb(kc);
+            }
+            for b in r.buttons.drain() {
+                r.input.events.unset_mb(b);
+            }
+            self.quit = true;
+            host::release_focus();
+            return self.render(frame);
         }
         // Not mixed yet.
         while r.sound.try_recv().is_ok() {}
@@ -257,7 +376,17 @@ impl Widget for Doom {
     }
 
     fn on_input(&mut self, event: Input) {
-        let Some(r) = &mut self.running else {
+        let showing_game = self.running.is_some() && !self.quit;
+        let Some(r) = self.running.as_mut().filter(|_| showing_game) else {
+            // On the title card: a click, Enter or Space starts the game.
+            let go = match &event {
+                Input::PointerDown(_) => true,
+                Input::KeyDown(k) => matches!(k.name.as_str(), "Enter" | "Space"),
+                _ => false,
+            };
+            if go && self.failed.is_none() {
+                self.start = true;
+            }
             return;
         };
         match event {
@@ -285,11 +414,31 @@ impl Widget for Doom {
                     }
                 }
             }
-            // The keyboard gone: every key let go.
+            Input::MouseMotion(d) => {
+                r.mouse.0 += d.x;
+                r.mouse.1 += d.y;
+            }
+            Input::PointerDown(p) => {
+                if let Some(b) = mouse_button(p.button) {
+                    r.input.events.set_mb(b);
+                    r.buttons.insert(b);
+                }
+            }
+            Input::PointerUp(p) => {
+                if let Some(b) = mouse_button(p.button) {
+                    r.input.events.unset_mb(b);
+                    r.buttons.remove(&b);
+                }
+            }
+            // The keyboard (and mouse) gone: every key and button let go.
             Input::Focus(false) => {
                 for kc in r.held.drain() {
                     r.input.events.unset_kb(kc);
                 }
+                for b in r.buttons.drain() {
+                    r.input.events.unset_mb(b);
+                }
+                r.mouse = (0.0, 0.0);
             }
             _ => {}
         }
