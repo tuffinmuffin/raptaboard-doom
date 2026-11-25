@@ -148,7 +148,9 @@ fn refresh_title_page(game: &mut Game) {
 }
 
 /// Draw one frame, `frac` of the way from the last step to the next, with
-/// `fps` top right when it isn't empty (Show FPS).
+/// `fps` top right when it isn't empty (Show FPS). `dim_more` darkens the
+/// scene under the menu further than the menu's own halving: Doom's red text
+/// is hard to read over bright walls, scaled up in a tab.
 pub fn d_display(
     screen: &mut RenderStack<u32>,
     menu: &mut impl SubsystemTrait,
@@ -156,6 +158,7 @@ pub fn d_display(
     game: &mut Game,
     frac: f32,
     fps: &str,
+    dim_more: bool,
 ) {
     let wipe = game.gamestate != game.wipe_game_state;
     if wipe && !screen.is_wiping() {
@@ -206,12 +209,37 @@ pub fn d_display(
         let x = ui.size().width_f32() - measure_text_line(fps, sx) - 4.0 * sx;
         draw_text_line(fps, x, 2.0 * sy, sx, sy, palette, ui);
     }
-    // Dimmed under it when Menu Dim is on (the menu's own setting).
+    // The menu halves the scene when Menu Dim is on; this first makes it 3/8.
+    if dim_more {
+        three_quarters(screen.screen_frame().buf_mut());
+    }
     menu.draw(screen.screen_frame());
     screen.upload_ui();
     screen.present(wipe);
     if wipe && screen.do_wipe() {
         game.wipe_game_state = game.gamestate;
         game.players[game.consoleplayer].save_prev_render();
+    }
+}
+
+/// Darken ARGB pixels to 3/4 of their brightness, keeping alpha.
+fn three_quarters(pixels: &mut [u32]) {
+    for p in pixels {
+        let half = (*p >> 1) & 0x007F_7F7F;
+        let quarter = (*p >> 2) & 0x003F_3F3F;
+        *p = (*p & 0xFF00_0000) | (half + quarter);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Tests written by Claude.
+    use super::*;
+
+    #[test]
+    fn dimming_takes_each_channel_to_three_quarters_and_keeps_alpha() {
+        let mut px = [0xFF80_4020, 0xFF00_0000, 0x12FF_FFFF];
+        three_quarters(&mut px);
+        assert_eq!(px, [0xFF60_3018, 0xFF00_0000, 0x12BE_BEBE]);
     }
 }
