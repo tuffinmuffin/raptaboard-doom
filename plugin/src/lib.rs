@@ -29,7 +29,7 @@ use gamestate::subsystems::GameSubsystem;
 use gamestate_traits::{KeyCode, SubsystemTrait};
 use input::InputState;
 use raptaboard_plugin::prelude::*;
-use render_backend::{RenderStack, RenderType, ResolutionOptions};
+use render_backend::{RenderStack, RenderType};
 use sound_common::SoundAction;
 use wad::WadData;
 
@@ -66,6 +66,9 @@ struct Running {
     frames: u32,
     fps_since_s: f64,
     fps_text: String,
+    /// The display the game draws for (`display_size`): its shape is the
+    /// frame's on screen.
+    display: (u32, u32),
     /// The frame's time the game started at.
     started_s: f64,
     /// Doom keys held, so all can be let go when the tab loses the keyboard.
@@ -102,7 +105,7 @@ fn read_splash() -> Option<(u32, u32, Vec<u8>)> {
     (rgba.len() == w as usize * h as usize * 4).then_some((w, h, rgba))
 }
 
-fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
+fn start(time_s: f64, width: f32, height: f32) -> Result<Running, String> {
     let pack = PathBuf::from(raptaboard_plugin::PACK_DIR);
     for name in std::iter::once(IWAD).chain(PWADS) {
         if !pack.join(name).is_file() {
@@ -124,6 +127,7 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
     let (options, wad) = gamestate::prepare_wad(options, wad);
     let (sound_tx, sound) = mpsc::channel();
     let settings = settings::defaults();
+    let display = display_size(width, height);
     let mut game = Game::new(options, wad, sound_tx, None, settings);
     let machines = GameSubsystem {
         statusbar: Statusbar::new(game.game_type.mode, &game.wad_data),
@@ -135,8 +139,8 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
     menu.init(&game);
     menu.set_render_context(false, false);
     let mut screen = RenderStack::new(
-        resolution(),
-        render_backend::new_buffer(width, height),
+        settings::resolution(&settings),
+        render_backend::new_buffer(display.0, display.1),
         RenderType::Software,
     );
     screen.set_statusbar_height(settings::statusbar_height(&settings));
@@ -156,20 +160,12 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         fps_since_s: time_s,
         fps_text: String::new(),
         started_s: time_s,
+        display,
         held: HashSet::new(),
         cheats: cheats::Cheats::new(),
         mouse: (0.0, 0.0),
         buttons: HashSet::new(),
     })
-}
-
-/// Doom's classic 320 × 200, scaled up by the dashboard.
-fn resolution() -> ResolutionOptions {
-    ResolutionOptions {
-        hi_res: false,
-        native_ui: false,
-        native_world: false,
-    }
 }
 
 /// An ARGB frame as RGBA bytes.
@@ -181,14 +177,20 @@ fn rgba(argb: &[u32]) -> Vec<u8> {
     out
 }
 
-/// The rect `w` × `h` pixels take, as large as fits in `frame` and centered:
-/// Doom's 4:3 (its 320 × 200 has tall pixels).
-fn fit(frame: &FrameInfo, w: u32, h: u32) -> (Point, Point) {
-    let aspect = if (w, h) == (320, 200) {
-        4.0 / 3.0
-    } else {
-        w as f32 / h.max(1) as f32
-    };
+/// The display the game draws for: the tab, but never narrower than 4:3.
+/// The game's frame is as wide as the display's shape makes it (its pixels
+/// tall, as on a CRT): narrower than 4:3, it's under 320 pixels and Doom's
+/// 320-wide status bar and menu are squeezed into it, dropping columns.
+fn display_size(width: f32, height: f32) -> (u32, u32) {
+    let h = height.max(1.0).round();
+    let w = width.round().max((h * 4.0 / 3.0).ceil());
+    (w as u32, h as u32)
+}
+
+/// Where the frame goes: as large as fits in `frame` and centered, at the
+/// `aspect` of the display it was drawn for (its pixels aren't square: the
+/// frame's own width over height isn't its shape).
+fn fit(frame: &FrameInfo, aspect: f32) -> (Point, Point) {
     let (fw, fh) = (frame.size.width, frame.size.height);
     let (dw, dh) = if fw / fh > aspect {
         (fh * aspect, fh)
@@ -300,8 +302,7 @@ impl Widget for Doom {
         }
         if self.running.is_none() && self.failed.is_none() {
             self.start = false;
-            let (w, h) = (frame.size.width as u32, frame.size.height as u32);
-            match start(frame.time_s, w, h) {
+            match start(frame.time_s, frame.size.width, frame.size.height) {
                 Ok(r) => self.running = Some(r),
                 Err(e) => {
                     host::log(&e);
@@ -387,7 +388,7 @@ impl Widget for Doom {
         );
         let (pixels, w, h) = r.screen.backend().frame();
         if w > 0 && h > 0 {
-            let (min, max) = fit(&frame, w, h);
+            let (min, max) = fit(&frame, r.display.0 as f32 / r.display.1 as f32);
             picture.shape(Shape::Pixels(Pixels {
                 min,
                 max,
@@ -473,3 +474,36 @@ impl Widget for Doom {
 }
 
 raptaboard_plugin::widget!(Doom);
+
+#[cfg(test)]
+mod tests {
+    // Tests written by Claude.
+    use super::*;
+
+    #[test]
+    fn the_display_is_never_narrower_than_four_thirds() {
+        assert_eq!(display_size(1265.0, 717.0), (1265, 717));
+        assert_eq!(display_size(700.0, 717.0), (956, 717));
+        assert_eq!(display_size(300.0, 600.0), (800, 600));
+    }
+
+    #[test]
+    fn a_narrow_tab_still_gets_doom_s_full_width() {
+        for (w, h) in [
+            (700.0, 717.0),
+            (900.0, 717.0),
+            (1265.0, 717.0),
+            (333.0, 1001.0),
+        ] {
+            let (dw, dh) = display_size(w, h);
+            let mut screen = RenderStack::<u32>::new(
+                settings::resolution(&settings::defaults()),
+                render_backend::new_buffer(dw, dh),
+                RenderType::Software,
+            );
+            screen.present(false);
+            let (_, fw, fh) = screen.backend().frame();
+            assert!(fw >= 320 && fh == 200, "{w}x{h}: {fw}x{fh}");
+        }
+    }
+}
