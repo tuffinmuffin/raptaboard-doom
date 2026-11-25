@@ -59,6 +59,11 @@ pub fn interpolate(v: &Values) -> bool {
     on(v, ConfigKey::FrameInterpolation)
 }
 
+/// Whether the scene darkens under the menu.
+pub fn menu_dim(v: &Values) -> bool {
+    on(v, ConfigKey::MenuDim)
+}
+
 /// Whether the frame rate shows, top right.
 pub fn show_fps(v: &Values) -> bool {
     on(v, ConfigKey::ShowFps)
