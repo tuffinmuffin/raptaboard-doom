@@ -1,6 +1,6 @@
 //! One game step and one frame's drawing, as room4doom's `game-exe/src/d_main.rs`
 //! does them (MIT, Copyright (c) 2020 Luke Jones), kept to what an embedded
-//! software renderer needs: no VR, no GPU effects, no FPS text.
+//! software renderer needs: no VR, no GPU effects.
 
 use std::ptr;
 
@@ -13,7 +13,7 @@ use input::InputState;
 use math::{Angle, Bam, FixedT, lookdir_to_radian};
 use render_backend::RenderStack;
 use render_common::{ByteOrder, DrawBuffer, HeadFrame, PixelFmt, RenderPspDef, RenderView};
-use ui_draw::UiCanvas;
+use ui_draw::{UiCanvas, draw_text_line, measure_text_line};
 use wad::types::{BLACK, WadPatch};
 
 /// The UI subsystems drawn over the world.
@@ -147,16 +147,15 @@ fn refresh_title_page(game: &mut Game) {
     }
 }
 
-/// Draw one frame, `frac` of the way from the last step to the next, the
-/// scene dimmed under the menu when `menu_open` (Doom's red menu text is hard
-/// to read over bright walls, scaled up in a window).
+/// Draw one frame, `frac` of the way from the last step to the next, with
+/// `fps` top right when it isn't empty (Show FPS).
 pub fn d_display(
     screen: &mut RenderStack<u32>,
     menu: &mut impl SubsystemTrait,
     machines: &mut Machines,
     game: &mut Game,
     frac: f32,
-    menu_open: bool,
+    fps: &str,
 ) {
     let wipe = game.gamestate != game.wipe_game_state;
     if wipe && !screen.is_wiping() {
@@ -200,36 +199,19 @@ pub fn d_display(
         }
         GameState::ForceWipe => {}
     }
-    if menu_open {
-        dim(screen.screen_frame().buf_mut());
+    if !fps.is_empty() {
+        let palette = game.pic_data.wad_palette();
+        let ui = screen.hud_frame();
+        let [sx, sy] = ui.ui_layout().scale;
+        let x = ui.size().width_f32() - measure_text_line(fps, sx) - 4.0 * sx;
+        draw_text_line(fps, x, 2.0 * sy, sx, sy, palette, ui);
     }
+    // Dimmed under it when Menu Dim is on (the menu's own setting).
     menu.draw(screen.screen_frame());
     screen.upload_ui();
     screen.present(wipe);
     if wipe && screen.do_wipe() {
         game.wipe_game_state = game.gamestate;
         game.players[game.consoleplayer].save_prev_render();
-    }
-}
-
-/// Darken ARGB pixels to 3/8 of their brightness.
-fn dim(pixels: &mut [u32]) {
-    for p in pixels {
-        let half = (*p >> 1) & 0x007F_7F7F;
-        let eighth = (*p >> 3) & 0x001F_1F1F;
-        *p = 0xFF00_0000 | (half - eighth);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // Tests written by Claude.
-    use super::*;
-
-    #[test]
-    fn dimming_darkens_each_channel_and_keeps_alpha() {
-        let mut px = [0xFFFF_8040, 0xFF00_0000, 0xFF10_2030];
-        dim(&mut px);
-        assert_eq!(px, [0xFF60_3018, 0xFF00_0000, 0xFF06_0C12]);
     }
 }

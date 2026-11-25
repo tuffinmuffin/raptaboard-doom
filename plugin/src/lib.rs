@@ -16,6 +16,7 @@
 mod cheats;
 mod display;
 mod keys;
+mod settings;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -25,7 +26,7 @@ use doom_ui::{Finale, GameMenu, Intermission, Messages, Statusbar};
 use game_config::GameOptions;
 use gamestate::Game;
 use gamestate::subsystems::GameSubsystem;
-use gamestate_traits::{ConfigKey, KeyCode, SubsystemTrait};
+use gamestate_traits::{KeyCode, SubsystemTrait};
 use input::InputState;
 use raptaboard_plugin::prelude::*;
 use render_backend::{RenderStack, RenderType, ResolutionOptions};
@@ -56,8 +57,13 @@ struct Running {
     sound: Receiver<SoundAction>,
     /// Steps run so far, against the clock.
     tics: u64,
-    /// The game's menu showed after the last step: the scene is dimmed under it.
-    menu_open: bool,
+    /// The game's settings, as the Options menu last left them.
+    settings: settings::Values,
+    /// Frames drawn in the second since `fps_since_s`, and the last second's
+    /// count as shown ("FPS 60") when Show FPS is on.
+    frames: u32,
+    fps_since_s: f64,
+    fps_text: String,
     /// The frame's time the game started at.
     started_s: f64,
     /// Doom keys held, so all can be let go when the tab loses the keyboard.
@@ -94,21 +100,6 @@ fn read_splash() -> Option<(u32, u32, Vec<u8>)> {
     (rgba.len() == w as usize * h as usize * 4).then_some((w, h, rgba))
 }
 
-/// The starting settings room4doom's own config gives, less what only a
-/// window or headset uses.
-fn config() -> [i32; ConfigKey::KeyCount as usize] {
-    let mut a = [0i32; ConfigKey::KeyCount as usize];
-    a[ConfigKey::SfxVolume as usize] = 10;
-    a[ConfigKey::MusVolume as usize] = 6;
-    a[ConfigKey::FrameInterpolation as usize] = 1;
-    a[ConfigKey::HudSize as usize] = 1;
-    a[ConfigKey::HudMsgMode as usize] = 1;
-    a[ConfigKey::HudMsgTime as usize] = 4;
-    a[ConfigKey::MouseSensitivity as usize] = 10;
-    a[ConfigKey::FreeLookShoot as usize] = 0;
-    a
-}
-
 fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
     let pack = PathBuf::from(raptaboard_plugin::PACK_DIR);
     for name in std::iter::once(IWAD).chain(PWADS) {
@@ -130,7 +121,8 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
     let wad = WadData::new(&pack.join(IWAD));
     let (options, wad) = gamestate::prepare_wad(options, wad);
     let (sound_tx, sound) = mpsc::channel();
-    let game = Game::new(options, wad, sound_tx, None, config());
+    let settings = settings::defaults();
+    let mut game = Game::new(options, wad, sound_tx, None, settings);
     let machines = GameSubsystem {
         statusbar: Statusbar::new(game.game_type.mode, &game.wad_data),
         intermission: Intermission::new(game.game_type.mode, &game.wad_data, &game.umapinfo),
@@ -145,8 +137,9 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         render_backend::new_buffer(width, height),
         RenderType::Software,
     );
-    screen.set_statusbar_height(render_common::STBAR_HEIGHT);
-    let input = InputState::new((&keys::controls()).into());
+    screen.set_statusbar_height(settings::statusbar_height(&settings));
+    let mut input = InputState::new((&keys::controls()).into());
+    settings::apply(&settings, &mut game, &mut screen, &mut input);
     Ok(Running {
         game,
         input,
@@ -155,7 +148,10 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         screen,
         sound,
         tics: 0,
-        menu_open: false,
+        settings,
+        frames: 0,
+        fps_since_s: time_s,
+        fps_text: String::new(),
         started_s: time_s,
         held: HashSet::new(),
         cheats: cheats::Cheats::new(),
@@ -335,8 +331,7 @@ impl Widget for Doom {
                 ev.apply_mouse_sensitivity((x, y));
                 r.mouse = (0.0, 0.0);
             }
-            r.menu_open =
-                display::run_game_tic(&mut r.game, &mut r.input, &mut r.menu, &mut r.machines);
+            display::run_game_tic(&mut r.game, &mut r.input, &mut r.menu, &mut r.machines);
             r.tics += 1;
         }
         // Quit from the game's menu: end the game (its memory freed), give
@@ -354,14 +349,36 @@ impl Widget for Doom {
         }
         // Not mixed yet.
         while r.sound.try_recv().is_ok() {}
-        let frac = (clock - clock.floor()) as f32;
+        // A setting the menu changed: applied before this frame is drawn.
+        if let Some(v) = settings::changed(&mut r.game) {
+            settings::apply(&v, &mut r.game, &mut r.screen, &mut r.input);
+            r.settings = v;
+        }
+        // Detail or Native UI changed during a screen wipe: now it's done.
+        settings::reconfigure(&r.settings, &mut r.screen);
+        let frac = if settings::interpolate(&r.settings) {
+            (clock - clock.floor()) as f32
+        } else {
+            1.0
+        };
+        r.frames += 1;
+        if frame.time_s - r.fps_since_s >= 1.0 {
+            r.fps_text = format!("FPS {}", r.frames);
+            r.frames = 0;
+            r.fps_since_s = frame.time_s;
+        }
+        let fps = if settings::show_fps(&r.settings) {
+            r.fps_text.as_str()
+        } else {
+            ""
+        };
         display::d_display(
             &mut r.screen,
             &mut r.menu,
             &mut r.machines,
             &mut r.game,
             frac,
-            r.menu_open,
+            fps,
         );
         let (pixels, w, h) = r.screen.backend().frame();
         if w > 0 && h > 0 {
