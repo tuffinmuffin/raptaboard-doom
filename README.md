@@ -98,7 +98,8 @@ is the menu. The mouse turns, its left button fires and its right moves forward 
 the tab has the keyboard; Shift+Esc gives both back). Cheats work as in the standalone game
 (`iddqd`, `idkfa`, `idclip`, ...). Sound plays through raptaboard's speakers while its sound
 is on (the bell): the effects, panned and quieter with distance, and the music on the OPL2
-synthesizer, mixed in the plugin (room4doom's rodio backend, without its audio device).
+synthesizer, mixed in the plugin (room4doom's rodio backend, without its audio device). The
+Options menu's settings are kept between runs (raptaboard's plugin storage).
 
 ## Robot sprites (`tools/robot_sprites.py`)
 
@@ -133,7 +134,7 @@ the trench. A flood fill from the start checks the field is sealed.
 ## Next steps
 
 - Split the converter from the map mods (a mod file layered on the base conversion).
-- The plugin's settings and saved games, once raptaboard gives plugins storage.
+- Saved games in the plugin (each about 100 KB: more than raptaboard's storage gives by default).
 - A raptaboard content pack built from this repo's CI artifacts.
 - Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).
 

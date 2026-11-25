@@ -464,7 +464,7 @@ dependencies = [
 [[package]]
 name = "raptaboard-plugin"
 version = "0.1.0"
-source = "git+https://github.com/tuffinmuffin/raptaboard?rev=14a9af0cb36505c6afd742dd9f4f01c8250518f3#14a9af0cb36505c6afd742dd9f4f01c8250518f3"
+source = "git+https://github.com/tuffinmuffin/raptaboard?rev=6a689320bde82d3f6545588a8888f94541b068cc#6a689320bde82d3f6545588a8888f94541b068cc"
 dependencies = [
  "wit-bindgen",
 ]

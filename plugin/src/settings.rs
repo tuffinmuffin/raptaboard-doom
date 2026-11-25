@@ -9,6 +9,70 @@ use gamestate_traits::{ConfigKey, ConfigTraits as _};
 use input::InputState;
 use render_backend::{RenderStack, RenderType, ResolutionOptions};
 
+/// The settings kept between runs (raptaboard storage, under [`STORED`]), by
+/// name: the Options menu's, less what does nothing here.
+const SAVED: &[(ConfigKey, &str)] = &[
+    (ConfigKey::SfxVolume, "sfx_volume"),
+    (ConfigKey::MusVolume, "music_volume"),
+    (ConfigKey::HiRes, "high_detail"),
+    (ConfigKey::NativeUi, "native_ui"),
+    (ConfigKey::FrameInterpolation, "interpolation"),
+    (ConfigKey::HealthBleed, "health_bleed"),
+    (ConfigKey::CrtGamma, "crt_gamma"),
+    (ConfigKey::ShowFps, "show_fps"),
+    (ConfigKey::MenuDim, "menu_dim"),
+    (ConfigKey::HudSize, "hud_size"),
+    (ConfigKey::HudWidth, "hud_width"),
+    (ConfigKey::HudMsgMode, "hud_messages"),
+    (ConfigKey::HudMsgTime, "hud_message_time"),
+    (ConfigKey::MouseSensitivity, "mouse_sensitivity"),
+    (ConfigKey::InvertY, "invert_y"),
+    (ConfigKey::FreeLookShoot, "free_look_shoot"),
+];
+
+/// The storage key the settings are kept under.
+const STORED: &str = "settings";
+
+/// The settings as kept: a `name=value` line each.
+pub fn to_text(v: &Values) -> String {
+    SAVED
+        .iter()
+        .map(|(key, name)| format!("{name}={}\n", v[*key as usize]))
+        .collect()
+}
+
+/// `v` with the settings in `text` (from [`to_text`]): a line with a name
+/// it doesn't know or a value that isn't a number is skipped.
+pub fn from_text(text: &str, mut v: Values) -> Values {
+    for line in text.lines() {
+        let Some((name, value)) = line.split_once('=') else {
+            continue;
+        };
+        if let (Some((key, _)), Ok(value)) = (
+            SAVED.iter().find(|(_, n)| *n == name.trim()),
+            value.trim().parse::<i32>(),
+        ) {
+            v[*key as usize] = value;
+        }
+    }
+    v
+}
+
+/// The defaults, with the settings kept from the last run, if any.
+pub fn load() -> Values {
+    match raptaboard_plugin::host::storage_get(STORED) {
+        Ok(Some(bytes)) => from_text(&String::from_utf8_lossy(&bytes), defaults()),
+        _ => defaults(),
+    }
+}
+
+/// Keep the settings for the next run (said in the log if they can't be).
+pub fn save(v: &Values) {
+    if let Err(e) = raptaboard_plugin::host::storage_set(STORED, to_text(v).as_bytes()) {
+        raptaboard_plugin::host::log(&format!("settings not saved: {e}"));
+    }
+}
+
 /// Every setting's value, by [`ConfigKey`].
 pub type Values = [i32; ConfigKey::KeyCount as usize];
 
@@ -111,6 +175,27 @@ mod tests {
         assert!(interpolate(&v));
         assert!(!show_fps(&v));
         assert_eq!(statusbar_height(&v), render_common::STBAR_HEIGHT);
+    }
+
+    #[test]
+    fn kept_settings_read_back_and_bad_lines_are_skipped() {
+        let mut v = defaults();
+        v[ConfigKey::ShowFps as usize] = 1;
+        v[ConfigKey::MouseSensitivity as usize] = 9;
+        v[ConfigKey::VrHudWidth as usize] = 77;
+        let text = to_text(&v);
+        assert!(text.contains("show_fps=1\n") && text.contains("mouse_sensitivity=9\n"));
+        let back = from_text(&text, defaults());
+        assert_eq!(back[ConfigKey::ShowFps as usize], 1);
+        assert_eq!(back[ConfigKey::MouseSensitivity as usize], 9);
+        // Not kept: a headset's.
+        assert_eq!(back[ConfigKey::VrHudWidth as usize], 0);
+        let odd = from_text(
+            "mouse_sensitivity=fast\nwarp=3\n\nmenu_dim = 0\nhalf",
+            defaults(),
+        );
+        assert_eq!(odd[ConfigKey::MouseSensitivity as usize], 5, "not a number");
+        assert_eq!(odd[ConfigKey::MenuDim as usize], 0, "spaces are fine");
     }
 
     #[test]

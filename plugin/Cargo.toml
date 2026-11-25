@@ -14,8 +14,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # raptaboard's plugin SDK, at the commit with the API this was written for (0.3,
-# with the mouse, release-focus and [limits] call_ms: raptaboard#103).
-raptaboard-plugin = { git = "https://github.com/tuffinmuffin/raptaboard", rev = "14a9af0cb36505c6afd742dd9f4f01c8250518f3" }
+# with the mouse, release-focus, [limits] call_ms and storage: raptaboard#106).
+raptaboard-plugin = { git = "https://github.com/tuffinmuffin/raptaboard", rev = "6a689320bde82d3f6545588a8888f94541b068cc" }
 
 gamestate = { path = "../vendor/room4doom/gamestate" }
 gamestate-traits = { path = "../vendor/room4doom/gamestate-traits" }

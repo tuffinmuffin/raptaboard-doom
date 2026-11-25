@@ -11,6 +11,8 @@ capture_mouse = true
 
 [permissions]
 sound = true
+# The Options menu's settings, kept between runs (a few hundred bytes).
+storage = true
 
 # The WADs (Freedoom's alone is 28 MB) and the textures made from them: it
 # runs at about 105 MiB.
