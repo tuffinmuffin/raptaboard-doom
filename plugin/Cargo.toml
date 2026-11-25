@@ -30,6 +30,9 @@ wad = { path = "../vendor/room4doom/wad" }
 sound-common = { path = "../vendor/room4doom/sound/common" }
 math = { path = "../vendor/room4doom/math" }
 log = "0.4"
+# room4doom's config format, to write the controls for raptaboard's keys.
+# (room4doom's own: the same git source its lock pins.)
+nanoserde = { git = "https://github.com/not-fl3/nanoserde.git", default-features = false, features = ["ron"] }
 
 [profile.release]
 opt-level = 3

@@ -84,8 +84,12 @@ raptaboard plugin dev build/plugin           # try it in raptaboard's sandbox
 `plugin/src/display.rs` is room4doom's frame drawing (`game-exe/src/d_main.rs`) kept to what
 an embedded software renderer needs; `plugin/src/keys.rs` maps raptaboard's key names to
 Doom's. It needs raptaboard with plugin API 0.3 and `[limits] memory_mb` (it runs at about
-105 MiB; the first frame loads the WADs, about 70 ms; each frame after about 1 ms). Not
-yet: sound (the game's sound messages are dropped) and cheats.
+105 MiB; the first frame loads the WADs, about 70 ms; each frame after about 1 ms).
+
+Controls: the arrows move and turn (W and S move too), A and D strafe, Ctrl fires, Space
+uses (doors, lifts), Alt strafes with the arrows, Shift runs, 1 to 7 pick a weapon, Escape
+is the menu. Cheats work as in the standalone game (`iddqd`, `idkfa`, `idclip`, ...).
+Not yet: sound (the game's sound messages are dropped) and the mouse.
 
 ## Robot sprites (`tools/robot_sprites.py`)
 

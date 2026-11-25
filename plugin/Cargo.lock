@@ -138,6 +138,7 @@ dependencies = [
  "input",
  "log",
  "math",
+ "nanoserde",
  "pic-data",
  "raptaboard-plugin",
  "render-backend",

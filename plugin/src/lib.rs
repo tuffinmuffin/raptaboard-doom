@@ -4,9 +4,10 @@
 //! The game steps 35 times a second by the frame's clock and is drawn about
 //! 60 times a second between steps (room4doom interpolates), as a pixel
 //! frame. Keys come while the tab has the keyboard. The WADs are read from
-//! the plugin's own folder (`/pack`). Sound isn't mixed yet: the game's sound
-//! messages are dropped.
+//! the plugin's own folder (`/pack`). Cheats work as in the standalone game.
+//! Sound isn't mixed yet: the game's sound messages are dropped.
 
+mod cheats;
 mod display;
 mod keys;
 
@@ -53,6 +54,8 @@ struct Running {
     started_s: f64,
     /// Doom keys held, so all can be let go when the tab loses the keyboard.
     held: HashSet<KeyCode>,
+    /// The cheat codes typed so far (`iddqd`).
+    cheats: cheats::Cheats,
 }
 
 #[derive(Default)]
@@ -114,7 +117,7 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         RenderType::Software,
     );
     screen.set_statusbar_height(render_common::STBAR_HEIGHT);
-    let input = InputState::new((&input::config::InputConfig::default()).into());
+    let input = InputState::new((&keys::controls()).into());
     Ok(Running {
         game,
         input,
@@ -125,6 +128,7 @@ fn start(time_s: f64, width: u32, height: u32) -> Result<Running, String> {
         tics: 0,
         started_s: time_s,
         held: HashSet::new(),
+        cheats: cheats::Cheats::new(),
     })
 }
 
@@ -173,6 +177,22 @@ fn fit(frame: &FrameInfo, w: u32, h: u32) -> (Point, Point) {
     )
 }
 
+/// What a screen reader says for the game (and tests read): the player's
+/// health and armor, and god mode when it's on.
+fn summary(game: &Game) -> String {
+    let player = &game.players[game.consoleplayer];
+    let status = &player.status;
+    // In a level the health is its map object's; between levels, the status's.
+    let health = player.mobj().map_or(status.health, |m| m.health);
+    let god = status.cheats.contains(gameplay::PlayerCheat::Godmode);
+    format!(
+        "Doom: health {}, armor {}{}",
+        health,
+        status.armorpoints,
+        if god { ", god mode" } else { "" }
+    )
+}
+
 impl Widget for Doom {
     fn subscriptions(&self) -> Vec<Subscription> {
         Vec::new()
@@ -192,7 +212,11 @@ impl Widget for Doom {
         }
         let Some(r) = &mut self.running else {
             let why = self.failed.clone().unwrap_or_default();
-            picture.text(centered_text(&frame, &format!("Doom can't start: {why}"), 16.0));
+            picture.text(centered_text(
+                &frame,
+                &format!("Doom can't start: {why}"),
+                16.0,
+            ));
             return picture;
         };
         // The steps due by the clock, at most a few a frame.
@@ -208,7 +232,13 @@ impl Widget for Doom {
         // Not mixed yet.
         while r.sound.try_recv().is_ok() {}
         let frac = (clock - clock.floor()) as f32;
-        display::d_display(&mut r.screen, &mut r.menu, &mut r.machines, &mut r.game, frac);
+        display::d_display(
+            &mut r.screen,
+            &mut r.menu,
+            &mut r.machines,
+            &mut r.game,
+            frac,
+        );
         let (pixels, w, h) = r.screen.backend().frame();
         if w > 0 && h > 0 {
             let (min, max) = fit(&frame, w, h);
@@ -222,7 +252,7 @@ impl Widget for Doom {
             }));
         }
         picture.redraw_in_s = Some(FRAME_S);
-        picture.summary = Some(format!("Doom, step {}", r.tics));
+        picture.summary = Some(summary(&r.game));
         picture
     }
 
@@ -233,18 +263,26 @@ impl Widget for Doom {
         match event {
             Input::KeyDown(k) => {
                 if let Some(kc) = keys::doom_key(&k.name) {
+                    // Cheats see every key in a level, as in the standalone game.
+                    if r.game.level.is_some() {
+                        r.cheats.check_input(kc, &mut r.game);
+                    }
                     if display::input_responder(kc, &mut r.game, &mut r.menu, &mut r.machines) {
                         r.input.events.unset_kb(kc);
                     } else {
-                        r.input.events.set_kb(kc);
-                        r.held.insert(kc);
+                        for k in std::iter::once(kc).chain(keys::alias(kc)) {
+                            r.input.events.set_kb(k);
+                            r.held.insert(k);
+                        }
                     }
                 }
             }
             Input::KeyUp(k) => {
                 if let Some(kc) = keys::doom_key(&k.name) {
-                    r.input.events.unset_kb(kc);
-                    r.held.remove(&kc);
+                    for k in std::iter::once(kc).chain(keys::alias(kc)) {
+                        r.input.events.unset_kb(k);
+                        r.held.remove(&k);
+                    }
                 }
             }
             // The keyboard gone: every key let go.
