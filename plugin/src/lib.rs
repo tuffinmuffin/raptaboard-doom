@@ -129,7 +129,7 @@ fn start(time_s: f64, width: f32, height: f32) -> Result<Running, String> {
     let wad = WadData::new(&pack.join(IWAD));
     let (options, wad) = gamestate::prepare_wad(options, wad);
     let (sound_tx, sound) = mpsc::channel();
-    let settings = settings::defaults();
+    let settings = settings::load();
     let display = display_size(width, height);
     let mut game = Game::new(options, wad, sound_tx, None, settings);
     let audio = audio::Audio::new(
@@ -388,6 +388,7 @@ impl Widget for Doom {
         // A setting the menu changed: applied before this frame is drawn.
         if let Some(v) = settings::changed(&mut r.game) {
             settings::apply(&v, &mut r.game, &mut r.screen, &mut r.input);
+            settings::save(&v);
             r.settings = v;
         }
         // Detail or Native UI changed during a screen wipe: now it's done.
