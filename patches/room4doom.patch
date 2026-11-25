@@ -738,6 +738,23 @@ index 93ccef0..f1643dc 100644
      /// Set the GPU renderer's light-falloff exponent (user config). No-op for the
      /// software renderers. Call after [`Self::new`]/[`Self::resize`] and on a
      /// config change (the value is not preserved across a rebuild).
+diff --git a/render/software25d/src/things.rs b/render/software25d/src/things.rs
+index 754f74b..a194a9a 100644
+--- a/render/software25d/src/things.rs
++++ b/render/software25d/src/things.rs
+@@ -553,8 +553,11 @@ impl Software25D {
+             vis.texture_mid += tmp;
+         }
+         vis.x1 = if x1 < 0 { FixedT::ZERO } else { x1 };
++        // The last column is width - 1 (draw_vissprite draws x1..=x2), as
++        // world sprites clamp: a weapon past the right edge of a narrow view
++        // (a nearly square window) drew one column past the clip arrays.
+         vis.x2 = if x2 >= FixedT::from(size.width()) {
+-            FixedT::from(size.width())
++            FixedT::from(size.width()) - 1
+         } else {
+             x2
+         };
 diff --git a/wad/src/wad.rs b/wad/src/wad.rs
 index ef9747e..41e7a45 100755
 --- a/wad/src/wad.rs
