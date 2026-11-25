@@ -1,0 +1,40 @@
+# The raptaboard Doom plugin: room4doom (vendor/room4doom, with our patch) as
+# a raptaboard tab plugin, built for WebAssembly. The standalone game
+# (`make engine`, `make play`) is unchanged; this is built alongside it
+# (`make plugin`).
+[package]
+name = "doom"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# raptaboard's plugin SDK, at the commit with the API this was written for (0.3).
+raptaboard-plugin = { git = "https://github.com/tuffinmuffin/raptaboard", rev = "dcadf60d03cce00719b8a71af473e062fa1202bc" }
+
+gamestate = { path = "../vendor/room4doom/gamestate" }
+gamestate-traits = { path = "../vendor/room4doom/gamestate-traits" }
+gameplay = { path = "../vendor/room4doom/gameplay" }
+game-config = { path = "../vendor/room4doom/game-config" }
+doom-ui = { path = "../vendor/room4doom/game-ui" }
+ui-draw = { path = "../vendor/room4doom/game-ui-draw" }
+input = { path = "../vendor/room4doom/input", default-features = false }
+render-common = { path = "../vendor/room4doom/render/common" }
+render-backend = { path = "../vendor/room4doom/render/backend", default-features = false, features = ["software25d", "display-buffer"] }
+pic-data = { path = "../vendor/room4doom/pic-data" }
+wad = { path = "../vendor/room4doom/wad" }
+sound-common = { path = "../vendor/room4doom/sound/common" }
+math = { path = "../vendor/room4doom/math" }
+log = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[workspace]
