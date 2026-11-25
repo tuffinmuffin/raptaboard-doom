@@ -2,7 +2,7 @@ PY := .venv/bin/python -I
 R4D := vendor/room4doom
 IWAD := downloads/freedoom/freedoom2.wad
 
-.PHONY: setup assets wad sprites face check engine play clean
+.PHONY: setup assets wad sprites face splash check patched engine plugin play clean
 
 setup:
 	python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
@@ -35,6 +35,11 @@ face: build/face.wad
 build/face.wad: tools/robot_face.py
 	$(PY) tools/robot_face.py
 
+# The plugin's title card: the KitBots and the hunter (~5 s)
+splash: build/splash.rgba
+build/splash.rgba: tools/splash.py tools/robot_sprites.py
+	$(PY) tools/splash.py
+
 check: wad
 	$(PY) tools/check_udmf.py build/frc2026.wad
 
@@ -43,10 +48,23 @@ $(R4D):
 	git clone https://github.com/flukejones/room4doom $(R4D)
 	git -C $(R4D) checkout -q `cat patches/room4doom.rev`
 
-engine: $(R4D)
+patched: $(R4D)
 	$(PY) tools/prep_room4doom.py $(R4D)
 	cd $(R4D) && (git apply --reverse --check ../../patches/room4doom.patch 2>/dev/null || git apply ../../patches/room4doom.patch)
+
+engine: patched
 	cd $(R4D) && cargo build --release -p room4doom
+
+# The raptaboard tab plugin (plugin/): the engine built for WebAssembly, in
+# build/plugin with its plugin.toml and WADs, as raptaboard loads it:
+#   raptaboard plugin dev build/plugin
+# Needs `rustup target add wasm32-wasip2`.
+PLUGIN := build/plugin
+plugin: patched wad sprites face splash
+	cd plugin && cargo build --release --target wasm32-wasip2
+	mkdir -p $(PLUGIN)
+	cp plugin/target/wasm32-wasip2/release/doom.wasm $(PLUGIN)/widget.wasm
+	cp plugin/plugin.toml $(IWAD) build/frc2026.wad build/robots.wad build/face.wad build/splash.rgba $(PLUGIN)/
 
 play: wad sprites face
 	$(R4D)/target/release/room4doom -i $(IWAD) -p build/frc2026.wad -p build/robots.wad -p build/face.wad -m 1

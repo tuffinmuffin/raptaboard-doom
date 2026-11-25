@@ -13,7 +13,11 @@ make setup assets   # python venv; field/KitBot GLBs + Freedoom Phase 2 into dow
 make check          # build/frc2026.wad + validation + build/frc2026_preview.png
 make engine         # clone room4doom at the pinned rev, apply our patch, cargo build
 make play           # MAP01 with freedoom2.wad + robot sprites + robot face (renders on first run)
+make plugin         # the raptaboard tab plugin, in build/plugin (see below)
 ```
+
+The standalone game (`make engine`, `make play`) is the place to build and try levels, and
+works without raptaboard; the plugin is built from the same patched engine beside it.
 
 ## What's in the map
 
@@ -53,6 +57,47 @@ make play           # MAP01 with freedoom2.wad + robot sprites + robot face (ren
   REJECT/BLOCKMAP, so the lookup now checks the lump name. Without this, a second PWAD
   (the robot sprites) made the engine read a sprite as REJECT and panic.
 
+- `gamestate/src/lib.rs`: `Game::new` takes the sound thread as an `Option`, for an
+  engine that mixes its own sound (the plugin); the standalone game passes its thread as
+  before.
+- `render/backend`: a `display-buffer` backend (`BufferBackend`, `new_buffer`) that keeps
+  each frame in memory for the caller instead of showing it in a window, and
+  `RenderStack::backend()`/`backend_mut()` to read it. The standalone game's backends are
+  unchanged.
+
+## raptaboard plugin (`plugin/`)
+
+The same engine as a [raptaboard](https://github.com/tuffinmuffin/raptaboard) tab plugin,
+built for WebAssembly (`wasm32-wasip2`): an empty tab named **Doom** becomes the game. It
+runs room4doom's game and software renderer with the buffer backend, steps the game 35
+times a second by raptaboard's clock and draws about 60 frames a second between steps
+(room4doom interpolates), as a pixel frame raptaboard scales to the tab. Click the tab for
+the keyboard (raptaboard's shortcuts are off until Shift+Esc or a click elsewhere). Its
+WADs are read from its own folder.
+
+```sh
+rustup target add wasm32-wasip2
+make plugin                                  # build/plugin: widget.wasm, plugin.toml, the WADs
+raptaboard plugin dev build/plugin           # try it in raptaboard's sandbox
+```
+
+`plugin/src/display.rs` is room4doom's frame drawing (`game-exe/src/d_main.rs`) kept to what
+an embedded software renderer needs; `plugin/src/keys.rs` maps raptaboard's key names to
+Doom's. It needs raptaboard with tuffinmuffin/raptaboard#103 (the mouse, `release-focus`,
+`[limits] call_ms`): it runs at about 105 MiB, loading the WADs or a level takes about
+60 ms to 200 ms, each frame about 1 ms.
+
+It opens on a title card (`tools/splash.py`: the KitBots and the hunter rendered from their
+CAD; `make splash`) and loads the game when clicked. Quitting from the game's menu gives the
+keyboard and mouse back to raptaboard and shows the card again; a click starts a new game in
+the data already loaded.
+
+Controls: the arrows move and turn (W and S move too), A and D strafe, Ctrl fires, Space
+uses (doors, lifts), Alt strafes with the arrows, Shift runs, 1 to 7 pick a weapon, Escape
+is the menu. The mouse turns, its left button fires and its right moves forward (held while
+the tab has the keyboard; Shift+Esc gives both back). Cheats work as in the standalone game
+(`iddqd`, `idkfa`, `idclip`, ...). Not yet: sound (the game's sound messages are dropped).
+
 ## Robot sprites (`tools/robot_sprites.py`)
 
 Point-splat renderer: ~1.5M colored points sampled from the CAD surfaces, projected
@@ -86,8 +131,9 @@ the trench. A flood fill from the start checks the field is sealed.
 ## Next steps
 
 - Split the converter from the map mods (a mod file layered on the base conversion).
-- WASM build of room4doom's core for the widget host once raptaboard's plugin API can
-  return a framebuffer and key up/down events.
+- The plugin's sound: a mixer for the sound effects and music (room4doom's rodio backend,
+  without rodio), into raptaboard's audio stream.
+- A raptaboard content pack built from this repo's CI artifacts.
 - Real slopes for the bumps; custom textures (carpet, polycarb, AprilTags).
 
 ## License

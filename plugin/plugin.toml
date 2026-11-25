@@ -1,0 +1,20 @@
+# The FRC 2026 field in Doom, as a raptaboard tab: an empty tab named "Doom"
+# becomes the game once this plugin is installed. It reads its WADs from its
+# own folder (/pack): freedoom2.wad, frc2026.wad, robots.wad and face.wad.
+name = "doom"
+version = "0.1.0"
+api = "0.3"
+tab = "Doom"
+# Turn with the mouse, fire with its left button: held while the tab has the
+# keyboard (Shift+Esc gives both back).
+capture_mouse = true
+
+[permissions]
+sound = true
+
+# The WADs (Freedoom's alone is 28 MB) and the textures made from them: it
+# runs at about 105 MiB.
+[limits]
+memory_mb = 192
+# Loading the WADs, or a level when one ends: over the usual 100 ms a call.
+call_ms = 500

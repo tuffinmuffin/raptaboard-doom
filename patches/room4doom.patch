@@ -562,6 +562,199 @@ index 6b1ca76..3996b05 100644
      pub(crate) fn look_for_players(&mut self, all_around: bool) -> bool {
          let stop = (self.lastlook + MAXPLAYERS - 1) & 3;
          let mut count = 0;
+diff --git a/gamestate/src/lib.rs b/gamestate/src/lib.rs
+index 73f6c38..93a619a 100755
+--- a/gamestate/src/lib.rs
++++ b/gamestate/src/lib.rs
+@@ -300,7 +300,9 @@ impl Game {
+         options: GameOptions,
+         wad: WadData,
+         snd_tx: SndServerTx,
+-        snd_thread: JoinHandle<()>,
++        // `None` where there's no sound thread (an embedded engine mixing
++        // its own sound); a `JoinHandle` converts.
++        snd_thread: impl Into<Option<JoinHandle<()>>>,
+         initial_config: [i32; ConfigKey::KeyCount as usize],
+     ) -> Self {
+         let wad_name = wad.wad_name().to_lowercase();
+@@ -381,7 +383,7 @@ impl Game {
+             save_description: String::new(),
+             options,
+             sound_cmd: snd_tx,
+-            snd_thread: Some(snd_thread),
++            snd_thread: snd_thread.into(),
+             umapinfo,
+         }
+     }
+diff --git a/render/backend/Cargo.toml b/render/backend/Cargo.toml
+index adf9246..2b25d31 100755
+--- a/render/backend/Cargo.toml
++++ b/render/backend/Cargo.toml
+@@ -14,6 +14,8 @@ software3d = ["dep:software3d", "cpu-render"]
+ wgpu3d = ["display-wgpu", "dep:wgpu3d"]
+ wgpu3dbsp = ["wgpu3d", "dep:wgpu3dbsp"]
+ display-sdl2 = ["dep:sdl2"]
++# Frames kept in memory for the caller (no window): embedding the engine.
++display-buffer = []
+ display-softbuffer = ["dep:softbuffer", "dep:winit"]
+ display-wgpu = ["dep:wgpu", "dep:pollster", "dep:winit"]
+ # Stereo presentation to an OpenXR runtime. Reuses the whole wgpu present
+diff --git a/render/backend/src/backend.rs b/render/backend/src/backend.rs
+index 3724f15..8d6f9db 100644
+--- a/render/backend/src/backend.rs
++++ b/render/backend/src/backend.rs
+@@ -46,6 +46,25 @@ pub type ActiveBackend<P> = crate::wgpu_backend::WgpuBackend<P>;
+ ))]
+ pub type ActiveBackend<P> = crate::softbuffer_backend::SoftbufferBackend<P>;
+ 
++#[cfg(all(
++    feature = "display-buffer",
++    not(feature = "display-softbuffer"),
++    not(feature = "display-wgpu"),
++    not(feature = "display-sdl2")
++))]
++pub type ActiveBackend<P> = crate::buffer_backend::BufferBackend<P>;
++
++/// Buffer backend rendering at `width`×`height`, frames kept in memory.
++#[cfg(all(
++    feature = "display-buffer",
++    not(feature = "display-softbuffer"),
++    not(feature = "display-wgpu"),
++    not(feature = "display-sdl2")
++))]
++pub fn new_buffer<P: PixelFmt + Clone>(width: u32, height: u32) -> ActiveBackend<P> {
++    crate::buffer_backend::BufferBackend::new(width, height)
++}
++
+ /// The two renderer kinds a backend may host.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum RenderKind {
+diff --git a/render/backend/src/buffer_backend.rs b/render/backend/src/buffer_backend.rs
+new file mode 100644
+index 0000000..0140e6a
+--- /dev/null
++++ b/render/backend/src/buffer_backend.rs
+@@ -0,0 +1,64 @@
++//! Buffer backend — keeps the engine's CPU frame in memory for the caller to
++//! read, instead of showing it in a window. For embedding the engine where the
++//! host draws the pixels itself (a raptaboard plugin built for WebAssembly).
++//!
++//! Software-present only. The "window" is a size the caller sets.
++
++use pic_data::PixelFmt;
++
++use crate::backend::{Backend, RenderKind, SoftwarePresent};
++
++/// Buffer backend: the last presented frame and the size to render at.
++pub struct BufferBackend<P: PixelFmt> {
++    size: (u32, u32),
++    frame: Vec<P>,
++    frame_size: (u32, u32),
++    presented: u64,
++}
++
++impl<P: PixelFmt + Clone> BufferBackend<P> {
++    pub(crate) fn new(width: u32, height: u32) -> Self {
++        Self {
++            size: (width.max(1), height.max(1)),
++            frame: Vec::new(),
++            frame_size: (0, 0),
++            presented: 0,
++        }
++    }
++
++    /// The size to render at, as a window's would be.
++    pub fn set_size(&mut self, width: u32, height: u32) {
++        self.size = (width.max(1), height.max(1));
++    }
++
++    /// The last frame presented: its pixels (tight, `w * h`), `w` and `h`.
++    pub fn frame(&self) -> (&[P], u32, u32) {
++        (&self.frame, self.frame_size.0, self.frame_size.1)
++    }
++
++    /// How many frames have been presented.
++    pub fn presented(&self) -> u64 {
++        self.presented
++    }
++}
++
++impl<P: PixelFmt + Clone> Backend for BufferBackend<P> {
++    fn window_size(&self) -> (u32, u32) {
++        self.size
++    }
++
++    fn set_fullscreen(&mut self, _mode: u8) {}
++
++    fn supports(&self, kind: RenderKind) -> bool {
++        kind == RenderKind::Software
++    }
++}
++
++impl<P: PixelFmt + Clone> SoftwarePresent<P> for BufferBackend<P> {
++    fn present(&mut self, front: &[P], w: u32, h: u32) {
++        self.frame.clear();
++        self.frame.extend_from_slice(front);
++        self.frame_size = (w, h);
++        self.presented += 1;
++    }
++}
+diff --git a/render/backend/src/lib.rs b/render/backend/src/lib.rs
+index 93ccef0..f1643dc 100644
+--- a/render/backend/src/lib.rs
++++ b/render/backend/src/lib.rs
+@@ -102,6 +102,17 @@ use backend::SoftwarePresent;
+ mod renderer;
+ pub use renderer::WorldRenderer;
+ 
++#[cfg(feature = "display-buffer")]
++mod buffer_backend;
++#[cfg(all(
++    feature = "display-buffer",
++    not(feature = "display-softbuffer"),
++    not(feature = "display-wgpu"),
++    not(feature = "display-sdl2")
++))]
++pub use backend::new_buffer;
++#[cfg(feature = "display-buffer")]
++pub use buffer_backend::BufferBackend;
+ #[cfg(feature = "display-sdl2")]
+ mod sdl2_backend;
+ #[cfg(feature = "display-softbuffer")]
+@@ -219,6 +230,16 @@ impl<P: PixelFmt> RenderStack<P> {
+         }
+     }
+ 
++    /// The display backend, to read a buffer backend's frame.
++    pub fn backend(&self) -> &ActiveBackend<P> {
++        &self.backend
++    }
++
++    /// The display backend, to resize a buffer backend.
++    pub fn backend_mut(&mut self) -> &mut ActiveBackend<P> {
++        &mut self.backend
++    }
++
+     /// Set the GPU renderer's light-falloff exponent (user config). No-op for the
+     /// software renderers. Call after [`Self::new`]/[`Self::resize`] and on a
+     /// config change (the value is not preserved across a rebuild).
+diff --git a/render/software25d/src/things.rs b/render/software25d/src/things.rs
+index 754f74b..a194a9a 100644
+--- a/render/software25d/src/things.rs
++++ b/render/software25d/src/things.rs
+@@ -553,8 +553,11 @@ impl Software25D {
+             vis.texture_mid += tmp;
+         }
+         vis.x1 = if x1 < 0 { FixedT::ZERO } else { x1 };
++        // The last column is width - 1 (draw_vissprite draws x1..=x2), as
++        // world sprites clamp: a weapon past the right edge of a narrow view
++        // (a nearly square window) drew one column past the clip arrays.
+         vis.x2 = if x2 >= FixedT::from(size.width()) {
+-            FixedT::from(size.width())
++            FixedT::from(size.width()) - 1
+         } else {
+             x2
+         };
 diff --git a/wad/src/wad.rs b/wad/src/wad.rs
 index ef9747e..41e7a45 100755
 --- a/wad/src/wad.rs
