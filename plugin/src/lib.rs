@@ -11,8 +11,10 @@
 //! Quitting from the game's menu ends the game, gives the keyboard and mouse
 //! back to raptaboard and shows the title card again; a click then starts a new
 //! game in the data already loaded (freeing it would take about half a second).
-//! Sound isn't mixed yet: the game's sound messages are dropped.
+//! Its sound is mixed here (effects and OPL2 music) and played through the
+//! dashboard's speakers, while the dashboard's sound is on.
 
+mod audio;
 mod cheats;
 mod display;
 mod keys;
@@ -53,8 +55,9 @@ struct Running {
     menu: GameMenu,
     machines: Machines,
     screen: RenderStack<u32>,
-    /// The game's sound messages (not mixed yet).
+    /// The game's sound messages, and their mixer.
     sound: Receiver<SoundAction>,
+    audio: audio::Audio,
     /// Steps run so far, against the clock.
     tics: u64,
     /// The game's menu showed after the last step.
@@ -129,6 +132,11 @@ fn start(time_s: f64, width: f32, height: f32) -> Result<Running, String> {
     let settings = settings::defaults();
     let display = display_size(width, height);
     let mut game = Game::new(options, wad, sound_tx, None, settings);
+    let audio = audio::Audio::new(
+        &game.wad_data,
+        settings[gamestate_traits::ConfigKey::SfxVolume as usize],
+        settings[gamestate_traits::ConfigKey::MusVolume as usize],
+    );
     let machines = GameSubsystem {
         statusbar: Statusbar::new(game.game_type.mode, &game.wad_data),
         intermission: Intermission::new(game.game_type.mode, &game.wad_data, &game.umapinfo),
@@ -153,6 +161,7 @@ fn start(time_s: f64, width: f32, height: f32) -> Result<Running, String> {
         machines,
         screen,
         sound,
+        audio,
         tics: 0,
         menu_open: false,
         settings,
@@ -166,6 +175,28 @@ fn start(time_s: f64, width: f32, height: f32) -> Result<Running, String> {
         mouse: (0.0, 0.0),
         buttons: HashSet::new(),
     })
+}
+
+/// The game's sound messages since the last frame, where the player now is,
+/// then this frame's share of the mix to the dashboard's speakers.
+fn play_sound(r: &mut Running, time_s: f64) {
+    while let Ok(action) = r.sound.try_recv() {
+        r.audio.handle(action);
+    }
+    if let Some(mobj) = r.game.players[r.game.consoleplayer].mobj() {
+        r.audio.handle(SoundAction::UpdateListener {
+            uid: std::ptr::from_ref(mobj) as usize,
+            x: mobj.x.to_f32(),
+            y: mobj.y.to_f32(),
+            angle: mobj.angle.rad(),
+        });
+    }
+    let frames = r.audio.due(time_s);
+    if frames > 0
+        && let Err(e) = host::play_audio(&r.audio.mix(frames), audio::RATE, 2)
+    {
+        host::log(&format!("no sound: {e}"));
+    }
 }
 
 /// An ARGB frame as RGBA bytes.
@@ -353,7 +384,7 @@ impl Widget for Doom {
             return self.render(frame);
         }
         // Not mixed yet.
-        while r.sound.try_recv().is_ok() {}
+        play_sound(r, frame.time_s);
         // A setting the menu changed: applied before this frame is drawn.
         if let Some(v) = settings::changed(&mut r.game) {
             settings::apply(&v, &mut r.game, &mut r.screen, &mut r.input);
