@@ -19,9 +19,11 @@ raptaboard-plugin = { git = "https://github.com/tuffinmuffin/raptaboard", rev = 
 
 gamestate = { path = "../vendor/room4doom/gamestate" }
 gamestate-traits = { path = "../vendor/room4doom/gamestate-traits" }
-gameplay = { path = "../vendor/room4doom/gameplay" }
+gameplay = { path = "../vendor/room4doom/gameplay", features = ["software25d"] }
 game-config = { path = "../vendor/room4doom/game-config" }
-doom-ui = { path = "../vendor/room4doom/game-ui" }
+# Its software25d feature lists that renderer in the options menu (with none
+# listed, the Renderer choice had no options and the menu panicked).
+doom-ui = { path = "../vendor/room4doom/game-ui", features = ["software25d"] }
 ui-draw = { path = "../vendor/room4doom/game-ui-draw" }
 input = { path = "../vendor/room4doom/input", default-features = false }
 render-common = { path = "../vendor/room4doom/render/common" }
