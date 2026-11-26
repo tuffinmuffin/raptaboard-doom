@@ -23,21 +23,25 @@ assets:
 	unzip -q -o -j downloads/freedoom-0.13.0.zip '*/freedoom2.wad' '*/COPYING.txt' -d downloads/freedoom
 
 wad:
+	mkdir -p build
 	$(PY) tools/field2wad.py
 
 # KitBot 2026/2025/2024 rendered over the zombieman/shotgunner/chaingunner sprites (~1.5 min)
 sprites: build/robots.wad
 build/robots.wad: tools/robot_sprites.py
+	mkdir -p build
 	$(PY) tools/robot_sprites.py
 
 # Pixel-art robot faces for the status bar (replaces the STF* faces)
 face: build/face.wad
 build/face.wad: tools/robot_face.py
+	mkdir -p build
 	$(PY) tools/robot_face.py
 
 # The plugin's title card: the KitBots and the hunter (~5 s)
 splash: build/splash.rgba
 build/splash.rgba: tools/splash.py tools/robot_sprites.py
+	mkdir -p build
 	$(PY) tools/splash.py
 
 check: wad
