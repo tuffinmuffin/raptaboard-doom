@@ -131,6 +131,16 @@ need a local Zed checkout).
 Scale is 128 map units per meter, so the player is a ~0.44 m robot that fits under
 the trench. A flood fill from the start checks the field is sealed.
 
+## Releases
+
+Push a tag on `main` to publish the raptaboard plugin: `vX.Y.Z` makes a release, `vX.Y.Z-pre.N` a
+pre-release, and `plugin/plugin.toml`'s `version` must be `X.Y.Z`. The Release workflow downloads
+the field, the KitBots and Freedoom, builds the WADs, sprites, title card and plugin
+(`make plugin`; the asset tools' versions are pinned, so the WADs come out the same), and attaches
+`doom.wasm` and its manifest `doom.toml`, the WADs and `splash.rgba` it reads from its folder, the
+notices (NOTICE.md and the three licenses) and `SHA256SUMS`. raptaboard-content's Doom pack points
+at these files. CI builds and tests the plugin on every pull request.
+
 ## Next steps
 
 - Split the converter from the map mods (a mod file layered on the base conversion).
