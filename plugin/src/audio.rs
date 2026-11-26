@@ -282,13 +282,19 @@ mod tests {
     use super::*;
 
     /// A WAD with nothing in it: no effects, no instruments.
+    /// A file of its own for each call: tests run at once, and one writing
+    /// a shared file while another reads it gave that one an empty WAD.
     fn empty_wad() -> WadData {
-        let path = std::env::temp_dir().join(format!("doom-audio-{}.wad", std::process::id()));
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("doom-audio-{}-{n}.wad", std::process::id()));
         let mut wad = b"PWAD".to_vec();
         wad.extend(0u32.to_le_bytes());
         wad.extend(12u32.to_le_bytes());
         std::fs::write(&path, wad).unwrap();
-        WadData::new(&path)
+        let data = WadData::new(&path);
+        let _ = std::fs::remove_file(&path);
+        data
     }
 
     /// An 8-bit lump: `rate` a second, these samples.
