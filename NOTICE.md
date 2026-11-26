@@ -7,6 +7,9 @@ This repository does **not** contain game data. The field model, the IWAD and th
 generated map (`build/frc2026.wad`) are downloaded or built locally and are gitignored.
 Anyone who redistributes a built WAD or a bundle containing these files must carry the
 notices below.
+This repository's releases (the raptaboard plugin) carry them: this file, Freedoom's
+`COPYING.txt` (as `freedoom-COPYING.txt`), AdvantageScopeAssets' license (kept in
+[licenses/](licenses/)) and room4doom's (`room4doom-LICENSE.txt`).
 
 ## Third-party inputs
 

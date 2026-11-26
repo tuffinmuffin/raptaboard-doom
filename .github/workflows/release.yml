@@ -1,0 +1,64 @@
+name: Release
+
+# Tag vX.Y.Z to publish a release, or vX.Y.Z-pre.N (any tag with a "-") to
+# publish a pre-release, of the raptaboard plugin: plugin/plugin.toml's version
+# must be X.Y.Z. It holds what raptaboard-content's Doom pack points at: the
+# plugin as doom.wasm with its manifest as doom.toml, the WADs and title card
+# it reads from its folder, and the notices that must travel with them.
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag matches plugin.toml's version
+        run: |
+          want="${GITHUB_REF_NAME#v}"; want="${want%%-*}"
+          have=$(sed -n 's/^version = "\(.*\)"/\1/p' plugin/plugin.toml)
+          if [ "$want" != "$have" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but plugin/plugin.toml says $have"; exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - name: Downloads (the field, the KitBots, Freedoom)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make setup assets
+      - name: Tests
+        run: make patched && (cd plugin && cargo test)
+      - name: Build the WADs, sprites, title card and plugin
+        run: make plugin
+      - name: Collect them
+        run: |
+          mkdir dist
+          cp build/plugin/widget.wasm dist/doom.wasm
+          cp build/plugin/plugin.toml dist/doom.toml
+          cp build/plugin/freedoom2.wad build/plugin/frc2026.wad build/plugin/robots.wad \
+             build/plugin/face.wad build/plugin/splash.rgba NOTICE.md dist/
+          cp downloads/freedoom/COPYING.txt dist/freedoom-COPYING.txt
+          cp licenses/AdvantageScopeAssets-LICENSE.txt dist/
+          cp vendor/room4doom/LICENSE dist/room4doom-LICENSE.txt
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -la dist
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=()
+          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
+          # --verify-tag: fail, saying so, if the tag isn't on GitHub.
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag "${pre[@]}" \
+            --title "Doom plugin $GITHUB_REF_NAME" \
+            --notes "The FRC 2026 field in Doom as a raptaboard tab plugin, built from $GITHUB_SHA. See NOTICE.md for the third-party content and its licenses."

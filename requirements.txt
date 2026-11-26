@@ -1,4 +1,7 @@
-trimesh
-numpy
-scipy
-pillow
+# The asset tools (tools/), pinned so a release's WADs are the same build to
+# build: the newest releases at least two weeks old when pinned (2026-11-25).
+# numpy 2.5 needs Python 3.12 or newer.
+numpy==2.5.4
+pillow==13.0.0
+scipy==1.18.1
+trimesh==5.2.0
